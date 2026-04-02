@@ -124,7 +124,7 @@ const monthsEs = [
 function monthTitleEs(ymd: string): string {
   const [y, m] = ymd.split("-").map(Number);
   const mes = monthsEs[m - 1];
-  return `${mes.charAt(0).toUpperCase("es") + mes.slice(1)} de ${y}`;
+  return `${mes.charAt(0).toLocaleUpperCase("es") + mes.slice(1)} de ${y}`;
 }
 
 function isSashaPublisherName(name: string | undefined): boolean {
