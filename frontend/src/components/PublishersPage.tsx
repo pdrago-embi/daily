@@ -140,7 +140,7 @@ export function PublishersPage({ title, query }: PublishersPageProps) {
 
   return (
     <div className="mx-auto max-w-6xl">
-      <section className="mb-12 rounded-2xl border border-slate-800 bg-slate-900/40 p-6 shadow-xl backdrop-blur">
+      <section className="mb-12 rounded-2xl border border-slate-800 bg-slate-900/40 p-4 shadow-xl backdrop-blur md:p-6">
         <div className="mb-6">
           <h2 className="text-xl font-semibold text-slate-100">
             {title} - Resumen del mes
@@ -204,7 +204,7 @@ export function PublishersPage({ title, query }: PublishersPageProps) {
         </div>
       </section>
 
-      <section className="rounded-2xl border border-slate-800 bg-slate-900/40 p-6 shadow-xl backdrop-blur">
+      <section className="rounded-2xl border border-slate-800 bg-slate-900/40 p-4 shadow-xl backdrop-blur md:p-6">
         <div className="mb-4">
           <h3 className="text-lg font-semibold text-slate-100 mb-4">
             Reporte

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   LineChart,
   Line,
@@ -70,7 +70,21 @@ export function TrendChart({ data }: { data: TrendPoint[] }) {
   const [visibleLines, setVisibleLines] = useState<Set<string>>(
     new Set(['revenue', 'cost', 'profit'])
   )
-  
+  const [compactChart, setCompactChart] = useState(false)
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 639px)')
+    const update = () => setCompactChart(mq.matches)
+    update()
+    mq.addEventListener('change', update)
+    return () => mq.removeEventListener('change', update)
+  }, [])
+
+  const chartMargin = compactChart
+    ? { top: 8, right: 4, left: 0, bottom: 4 }
+    : { top: 8, right: 16, left: 8, bottom: 8 }
+  const yAxisWidth = compactChart ? 52 : 72
+
   const today = getTodayDateString()
   const filteredData = data.filter(p => p.date !== today)
   
@@ -104,23 +118,20 @@ export function TrendChart({ data }: { data: TrendPoint[] }) {
           />
         ))}
       </div>
-      <div className="h-[380px] w-full">
+      <div className="h-[220px] w-full sm:h-[300px] md:h-[380px]">
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart
-            data={chartData}
-            margin={{ top: 8, right: 16, left: 8, bottom: 8 }}
-          >
+          <LineChart data={chartData} margin={chartMargin}>
             <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
             <XAxis
               dataKey="label"
-              tick={{ fill: '#94a3b8', fontSize: 11 }}
-              tickMargin={8}
+              tick={{ fill: '#94a3b8', fontSize: compactChart ? 10 : 11 }}
+              tickMargin={compactChart ? 6 : 8}
               interval={0}
             />
             <YAxis
-              tick={{ fill: '#94a3b8', fontSize: 11 }}
+              tick={{ fill: '#94a3b8', fontSize: compactChart ? 10 : 11 }}
               tickFormatter={(v) => formatCurrencyCompact(Number(v))}
-              width={72}
+              width={yAxisWidth}
             />
             <Tooltip
               contentStyle={{

@@ -15,7 +15,7 @@ export default function App() {
 
   return (
     <div className="mx-auto max-w-6xl">
-      <section className="mb-12 rounded-2xl border border-slate-800 bg-slate-900/40 p-6 shadow-xl backdrop-blur">
+      <section className="mb-12 rounded-2xl border border-slate-800 bg-slate-900/40 p-4 shadow-xl backdrop-blur md:p-6">
         <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-xl font-semibold text-slate-100">

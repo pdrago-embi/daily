@@ -8,7 +8,7 @@ export function KpiSummaryCards({ scope }: { scope: SummaryScope }) {
 
   if (query.isPending) {
     return (
-      <div className="rounded-xl border border-slate-800 bg-slate-900/40 px-4 py-8 text-center text-sm text-slate-500">
+      <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4 text-center text-sm text-slate-500 md:p-6">
         <Loading message="Cargando resumen mensual..." />
       </div>
     )
