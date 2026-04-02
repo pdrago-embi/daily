@@ -1,0 +1,93 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-primary: #020617;
+  --bg-secondary: #0f172a;
+  --bg-tertiary: #1e293b;
+  --text-primary: #f1f5f9;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+  --border-color: #334155;
+  --border-subtle: #1e293b;
+}
+
+.light {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f8fafc;
+  --bg-tertiary: #f1f5f9;
+  --text-primary: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #64748b;
+  --border-color: #e2e8f0;
+  --border-subtle: #f1f5f9;
+}
+
+body {
+  margin: 0;
+  @apply antialiased;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.light .bg-slate-900\/40 {
+  background-color: var(--bg-secondary);
+}
+
+.light .bg-slate-950\/60 {
+  background-color: var(--bg-tertiary);
+}
+
+.light .bg-slate-900\/50 {
+  background-color: var(--bg-tertiary);
+}
+
+.light .border-slate-800 {
+  border-color: var(--border-color);
+}
+
+.light .border-slate-800\/80 {
+  border-color: var(--border-color);
+}
+
+.light .text-slate-100 {
+  color: var(--text-primary);
+}
+
+.light .text-slate-200 {
+  color: var(--text-secondary);
+}
+
+.light .text-slate-300 {
+  color: var(--text-secondary);
+}
+
+.light .text-slate-400 {
+  color: var(--text-muted);
+}
+
+.light .text-slate-500 {
+  color: var(--text-muted);
+}
+
+.light .text-emerald-400 {
+  color: #059669;
+}
+
+.light .text-rose-400 {
+  color: #e11d48;
+}
+
+.light .text-violet-300 {
+  color: #8b5cf6;
+}
+
+.light .bg-slate-950\/50 {
+  background-color: var(--bg-tertiary);
+}

@@ -1,0 +1,345 @@
+import { useState, useMemo } from 'react'
+import { ErrorBox, Loading } from '../ui'
+import { formatCurrency, formatNumber } from '../utils/formatters'
+
+type SortKey = 'publisher_name' | 'adRequests' | 'impressions' | 'revenue' | 'cost' | 'profit' | 'date'
+type SortDirection = 'asc' | 'desc'
+type TabType = 'publisher' | 'day'
+
+interface PublishersPageProps {
+  title: string
+  query: any
+}
+
+export function PublishersPage({ title, query }: PublishersPageProps) {
+  const [sortKey, setSortKey] = useState<SortKey>('revenue')
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
+  const [activeTab, setActiveTab] = useState<TabType>('publisher')
+
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortKey(key)
+      setSortDirection('desc')
+    }
+  }
+
+  const sortedPublishers = useMemo(() => {
+    if (!query.data?.publishers) return []
+    return [...query.data.publishers].sort((a, b) => {
+      const aVal = (a as any)[sortKey]
+      const bVal = (b as any)[sortKey]
+      if (typeof aVal === 'string' && typeof bVal === 'string') {
+        return sortDirection === 'asc' 
+          ? aVal.localeCompare(bVal)
+          : bVal.localeCompare(aVal)
+      }
+      return sortDirection === 'asc' 
+        ? (aVal as number) - (bVal as number)
+        : (bVal as number) - (aVal as number)
+    })
+  }, [query.data?.publishers, sortKey, sortDirection])
+
+  const sortedDaily = useMemo(() => {
+    if (!query.data?.daily) return []
+    return [...query.data.daily].sort((a, b) => {
+      const aVal = (a as any)[sortKey]
+      const bVal = (b as any)[sortKey]
+      if (sortKey === 'date') {
+        return sortDirection === 'asc' 
+          ? (aVal as string).localeCompare(bVal as string)
+          : (bVal as string).localeCompare(aVal as string)
+      }
+      if (typeof aVal === 'string' && typeof bVal === 'string') {
+        return sortDirection === 'asc' 
+          ? aVal.localeCompare(bVal)
+          : bVal.localeCompare(aVal)
+      }
+      return sortDirection === 'asc' 
+        ? (aVal as number) - (bVal as number)
+        : (bVal as number) - (aVal as number)
+    })
+  }, [query.data?.daily, sortKey, sortDirection])
+
+  const SortHeader = ({ label, sortColumnKey, align = 'left', onSort, currentSortKey, currentSortDirection }: { label: string, sortColumnKey: string, align?: 'left' | 'right', onSort: (key: string) => void, currentSortKey: string, currentSortDirection: SortDirection }) => (
+    <th 
+      className={`whitespace-nowrap px-3 py-3 font-medium cursor-pointer hover:text-violet-300 transition-colors sm:px-4 ${align === 'right' ? 'text-right' : ''}`}
+      onClick={() => onSort(sortColumnKey)}
+    >
+      <div className="flex items-center gap-1">
+        {label}
+        {currentSortKey === sortColumnKey && (
+          <span className="text-violet-300">
+            {currentSortDirection === 'asc' ? '↑' : '↓'}
+          </span>
+        )}
+      </div>
+    </th>
+  )
+
+  if (query.isPending) {
+    return (
+      <div className="mx-auto max-w-6xl px-4 py-10">
+        <Loading message={`Cargando publishers de ${title}...`} />
+      </div>
+    )
+  }
+
+  if (query.isError) {
+    return (
+      <div className="mx-auto max-w-6xl px-4 py-10">
+        <ErrorBox
+          message={
+            query.error instanceof Error
+              ? query.error.message
+              : `Error al cargar publishers de ${title}`
+          }
+        />
+      </div>
+    )
+  }
+
+  const d = query.data
+  if (!d) return null
+
+  const hasData = d.totals.adRequests > 0 || d.totals.revenue > 0
+
+  const summaryRows = [
+    {
+      label: 'Ad requests',
+      format: 'int' as const,
+      current: d.totals.adRequests,
+      projected: d.totals.projectedAdRequests,
+    },
+    {
+      label: 'Impresiones',
+      format: 'int' as const,
+      current: d.totals.impressions,
+      projected: d.totals.projectedImpressions,
+    },
+    {
+      label: 'Revenue',
+      format: 'money' as const,
+      current: d.totals.revenue,
+      projected: d.totals.projectedRevenue,
+    },
+    {
+      label: 'Cost',
+      format: 'money' as const,
+      current: d.totals.cost,
+      projected: d.totals.projectedCost,
+    },
+    {
+      label: 'Profit',
+      format: 'money' as const,
+      current: d.totals.profit,
+      projected: d.totals.projectedProfit,
+    },
+  ]
+
+  return (
+    <div className="mx-auto max-w-6xl">
+      <section className="mb-12 rounded-2xl border border-slate-800 bg-slate-900/40 p-6 shadow-xl backdrop-blur">
+        <div className="mb-6">
+          <h2 className="text-xl font-semibold text-slate-100">
+            {title} - Resumen del mes
+          </h2>
+          <p className="text-sm text-slate-500">
+            {d.dateRange} • {!hasData ? 'Sin datos del mes actual' : `${d.daysElapsed} de ${d.daysInMonth} días`}
+          </p>
+        </div>
+
+        <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/60 shadow-inner">
+          <table className="w-full min-w-[640px] text-left text-sm">
+            <thead>
+              <tr className="border-b border-slate-800 text-xs text-slate-500">
+                <th className="whitespace-nowrap px-3 py-3 font-medium sm:px-4">
+                  Métrica
+                </th>
+                <th className="whitespace-nowrap px-3 py-3 text-right font-medium sm:px-4">
+                  <div>{d.currentMonthLabel}</div>
+                  <div className="text-slate-600 font-normal">{d.dateRange}</div>
+                </th>
+                <th className="whitespace-nowrap px-3 py-3 text-right font-medium text-violet-300 sm:px-4">
+                  Proyectado<br/>
+                  <span className="font-normal text-violet-400/70">{d.currentMonthLabel}</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {summaryRows.map((r) => {
+                const f = r.format === 'money' 
+                  ? (n: number) => formatCurrency(n, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                  : formatNumber
+                return (
+                  <tr
+                    key={r.label}
+                    className="border-b border-slate-800/80 last:border-0"
+                  >
+                    <td className="px-3 py-3 font-medium text-slate-200 sm:px-4">
+                      {r.label}
+                    </td>
+                    <td className="px-3 py-3 text-right text-slate-100 sm:px-4">
+                      {!hasData
+                        ? 'N/A'
+                        : f(r.current)}
+                    </td>
+                    <td
+                      className={`px-3 py-3 text-right font-medium sm:px-4 ${
+                        !hasData
+                          ? 'text-slate-500'
+                          : 'text-violet-300'
+                      }`}
+                    >
+                      {!hasData
+                        ? 'N/A'
+                        : f(r.projected)}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-slate-800 bg-slate-900/40 p-6 shadow-xl backdrop-blur">
+        <div className="mb-4">
+          <h3 className="text-lg font-semibold text-slate-100 mb-4">
+            Reporte
+          </h3>
+          <div className="flex gap-4 border-b border-slate-800">
+            <button
+              onClick={() => setActiveTab('publisher')}
+              className={`pb-2 px-1 text-sm font-medium transition-colors ${
+                activeTab === 'publisher'
+                  ? 'text-violet-300 border-b-2 border-violet-300'
+                  : 'text-slate-500 hover:text-slate-300'
+              }`}
+            >
+              Por Publisher
+            </button>
+            <button
+              onClick={() => setActiveTab('day')}
+              className={`pb-2 px-1 text-sm font-medium transition-colors ${
+                activeTab === 'day'
+                  ? 'text-violet-300 border-b-2 border-violet-300'
+                  : 'text-slate-500 hover:text-slate-300'
+              }`}
+            >
+              Por Día
+            </button>
+          </div>
+          <p className="text-sm text-slate-500 mt-2">
+            {d.dateRange} • {!hasData ? 'Sin datos del mes actual' : `${d.daysElapsed} de ${d.daysInMonth} días`}
+          </p>
+        </div>
+        
+        {activeTab === 'publisher' && (
+          <>
+            {sortedPublishers.length === 0 ? (
+              <p className="py-8 text-center text-slate-500">
+                No hay publishers con nombre que empiece por &quot;{title.split(' ')[0]}&quot; en el mes actual.
+              </p>
+            ) : (
+              <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/60 shadow-inner">
+                <table className="w-full min-w-[800px] text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-800 text-xs text-slate-500">
+                      <SortHeader label="Publisher" sortColumnKey="publisher_name" onSort={handleSort as (key: string) => void} currentSortKey={sortKey} currentSortDirection={sortDirection} />
+                      <SortHeader label="Ad Requests" sortColumnKey="adRequests" align="right" onSort={handleSort as (key: string) => void} currentSortKey={sortKey} currentSortDirection={sortDirection} />
+                      <SortHeader label="Impresiones" sortColumnKey="impressions" align="right" onSort={handleSort as (key: string) => void} currentSortKey={sortKey} currentSortDirection={sortDirection} />
+                      <SortHeader label="Revenue" sortColumnKey="revenue" align="right" onSort={handleSort as (key: string) => void} currentSortKey={sortKey} currentSortDirection={sortDirection} />
+                      <SortHeader label="Cost" sortColumnKey="cost" align="right" onSort={handleSort as (key: string) => void} currentSortKey={sortKey} currentSortDirection={sortDirection} />
+                      <SortHeader label="Profit" sortColumnKey="profit" align="right" onSort={handleSort as (key: string) => void} currentSortKey={sortKey} currentSortDirection={sortDirection} />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedPublishers.map((p) => (
+                      <tr
+                        key={p.publisher_name}
+                        className="border-b border-slate-800/80 last:border-0"
+                      >
+                        <td className="px-3 py-3 font-medium text-slate-200 sm:px-4">
+                          {p.publisher_name}
+                        </td>
+                        <td className="px-3 py-3 text-right text-slate-100 sm:px-4">
+                          {formatNumber(p.adRequests)}
+                        </td>
+                        <td className="px-3 py-3 text-right text-slate-100 sm:px-4">
+                          {formatNumber(p.impressions)}
+                        </td>
+                        <td className="px-3 py-3 text-right text-slate-100 sm:px-4">
+                          {formatCurrency(p.revenue, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                        <td className="px-3 py-3 text-right text-slate-100 sm:px-4">
+                          {formatCurrency(p.cost, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                        <td className="px-3 py-3 text-right text-slate-100 sm:px-4">
+                          {formatCurrency(p.profit, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        )}
+
+        {activeTab === 'day' && (
+          <>
+            {!d.daily || d.daily.length === 0 ? (
+              <p className="py-8 text-center text-slate-500">
+                No hay datos diarios disponibles.
+              </p>
+            ) : (
+              <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/60 shadow-inner">
+                <table className="w-full min-w-[800px] text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-800 text-xs text-slate-500">
+                      <SortHeader label="Fecha" sortColumnKey="date" onSort={handleSort as (key: string) => void} currentSortKey={sortKey} currentSortDirection={sortDirection} />
+                      <SortHeader label="Ad Requests" sortColumnKey="adRequests" align="right" onSort={handleSort as (key: string) => void} currentSortKey={sortKey} currentSortDirection={sortDirection} />
+                      <SortHeader label="Impresiones" sortColumnKey="impressions" align="right" onSort={handleSort as (key: string) => void} currentSortKey={sortKey} currentSortDirection={sortDirection} />
+                      <SortHeader label="Revenue" sortColumnKey="revenue" align="right" onSort={handleSort as (key: string) => void} currentSortKey={sortKey} currentSortDirection={sortDirection} />
+                      <SortHeader label="Cost" sortColumnKey="cost" align="right" onSort={handleSort as (key: string) => void} currentSortKey={sortKey} currentSortDirection={sortDirection} />
+                      <SortHeader label="Profit" sortColumnKey="profit" align="right" onSort={handleSort as (key: string) => void} currentSortKey={sortKey} currentSortDirection={sortDirection} />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedDaily.map((day) => (
+                      <tr
+                        key={day.date}
+                        className="border-b border-slate-800/80 last:border-0"
+                      >
+                        <td className="px-3 py-3 font-medium text-slate-200 sm:px-4">
+                          {day.date}
+                        </td>
+                        <td className="px-3 py-3 text-right text-slate-100 sm:px-4">
+                          {formatNumber(day.adRequests)}
+                        </td>
+                        <td className="px-3 py-3 text-right text-slate-100 sm:px-4">
+                          {formatNumber(day.impressions)}
+                        </td>
+                        <td className="px-3 py-3 text-right text-slate-100 sm:px-4">
+                          {formatCurrency(day.revenue, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                        <td className="px-3 py-3 text-right text-slate-100 sm:px-4">
+                          {formatCurrency(day.cost, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                        <td className="px-3 py-3 text-right text-slate-100 sm:px-4">
+                          {formatCurrency(day.profit, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        )}
+      </section>
+    </div>
+  )
+}
