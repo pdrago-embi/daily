@@ -1,23 +1,19 @@
 import { useState, useMemo } from 'react'
 import { ErrorBox, Loading, SortHeader } from '../ui'
 import { formatCurrency, formatNumber } from '../utils/formatters'
-import type { SashaPublishersResponse } from '../api/metrics'
+import type { MediaBuyer } from '../utils/mediaBuyers'
+import { useMediaBuyerQuery } from '../hooks'
 
 type SortKey = 'publisher_name' | 'adRequests' | 'impressions' | 'revenue' | 'cost' | 'profit' | 'date'
 type SortDirection = 'asc' | 'desc'
 type TabType = 'publisher' | 'day'
 
 interface PublishersPageProps {
-  title: string
-  query: {
-    isPending: boolean
-    isError: boolean
-    error: Error | null
-    data: SashaPublishersResponse | null
-  }
+  buyer: MediaBuyer
 }
 
-export function PublishersPage({ title, query }: PublishersPageProps) {
+export function PublishersPage({ buyer }: PublishersPageProps) {
+  const query = useMediaBuyerQuery(buyer.prefix, true)
   const [sortKey, setSortKey] = useState<SortKey>('revenue')
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
   const [activeTab, setActiveTab] = useState<TabType>('publisher')
@@ -72,7 +68,7 @@ export function PublishersPage({ title, query }: PublishersPageProps) {
   if (query.isPending) {
     return (
       <div className="mx-auto max-w-6xl px-4 py-10">
-        <Loading message={`Cargando publishers de ${title}...`} />
+        <Loading message={`Cargando publishers de ${buyer.name}...`} />
       </div>
     )
   }
@@ -84,7 +80,7 @@ export function PublishersPage({ title, query }: PublishersPageProps) {
           message={
             query.error instanceof Error
               ? query.error.message
-              : `Error al cargar publishers de ${title}`
+              : `Error al cargar publishers de ${buyer.name}`
           }
         />
       </div>
@@ -134,7 +130,7 @@ export function PublishersPage({ title, query }: PublishersPageProps) {
       <section className="mb-12 rounded-2xl border border-slate-800 bg-slate-900/40 p-4 shadow-xl backdrop-blur md:p-6">
         <div className="mb-6">
           <h2 className="text-xl font-semibold text-slate-100">
-            {title} - Resumen del mes
+            {buyer.name} - Resumen del mes
           </h2>
           <p className="text-sm text-slate-500">
             {d.dateRange} • {!hasData ? 'Sin datos del mes actual' : `${d.daysElapsed} de ${d.daysInMonth} días`}
@@ -231,7 +227,7 @@ export function PublishersPage({ title, query }: PublishersPageProps) {
           <>
             {sortedPublishers.length === 0 ? (
               <p className="py-8 text-center text-slate-500">
-                No hay publishers con nombre que empiece por &quot;{title.split(' ')[0]}&quot; en el mes actual.
+                No hay publishers con nombre que empiece por &quot;{buyer.prefix}&quot; en el mes actual.
               </p>
             ) : (
               <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/60 shadow-inner">

@@ -1,14 +1,13 @@
 import { useState } from 'react'
-import { useDashboardData } from './hooks'
+import { useDashboardData, useMediaBuyers } from './hooks'
 import { TrendChart } from './components/TrendChart'
 import { KpiSummaryCards } from './components/KpiSummaryCards'
 import { ErrorBox, Loading, ToggleGroup } from './ui'
 import type { SummaryScope } from './types'
 
-type ChartTab = 'general' | 'sasha' | 'embi'
-
 export default function App() {
-  const [chartTab, setChartTab] = useState<ChartTab>('general')
+  const [chartTab, setChartTab] = useState<string>('general')
+  const { buyers } = useMediaBuyers()
 
   const { isPending, isError, error, data } = useDashboardData(
     chartTab as SummaryScope,
@@ -16,6 +15,11 @@ export default function App() {
   )
 
   const chartData = data?.trend ?? null
+
+  const tabOptions = [
+    { value: 'general', label: 'General' },
+    ...buyers.map(b => ({ value: b.id, label: b.name })),
+  ]
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -27,13 +31,9 @@ export default function App() {
             </h2>
           </div>
           <ToggleGroup
-            options={[
-              { value: 'general', label: 'General' },
-              { value: 'sasha', label: 'Sasha Balbi' },
-              { value: 'embi', label: 'Embi Media' },
-            ]}
+            options={tabOptions}
             value={chartTab}
-            onChange={(v) => setChartTab(v as ChartTab)}
+            onChange={(v) => setChartTab(v as string)}
             label="Vista del gráfico"
           />
         </div>

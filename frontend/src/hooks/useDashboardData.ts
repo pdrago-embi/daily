@@ -1,9 +1,11 @@
-import { useQuery, useQueries } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import {
   fetchTrend,
   fetchSashaTrend,
   fetchEmbiTrend,
+  fetchTrendByPrefix,
   fetchSummary,
+  fetchSummaryByPrefix,
   type SummaryScope,
   type TrendPoint,
   type SummaryResponse,
@@ -14,25 +16,65 @@ export interface DashboardData {
   summary: SummaryResponse
 }
 
-export function useDashboardData(scope: SummaryScope, enabled = true) {
-  const isGeneral = scope === 'general'
-  const isSasha = scope === 'sasha'
+function getTrendQueryFn(scope: string): () => Promise<TrendPoint[]> {
+  switch (scope) {
+    case 'general':
+      return fetchTrend
+    case 'sasha':
+      return fetchSashaTrend
+    case 'embi':
+      return fetchEmbiTrend
+    default:
+      return () => fetchTrendByPrefix(scope)
+  }
+}
 
+function getSummaryQueryFn(scope: string): () => Promise<SummaryResponse> {
+  switch (scope) {
+    case 'general':
+      return () => fetchSummary('general')
+    case 'sasha':
+      return () => fetchSummary('sasha')
+    case 'embi':
+      return () => fetchSummary('embi')
+    default:
+      return () => fetchSummaryByPrefix(scope)
+  }
+}
+
+function getTrendQueryKey(scope: string): string[] {
+  switch (scope) {
+    case 'general':
+    case 'sasha':
+    case 'embi':
+      return ['trend', scope]
+    default:
+      return ['trend', 'by-prefix', scope]
+  }
+}
+
+function getSummaryQueryKey(scope: string): string[] {
+  switch (scope) {
+    case 'general':
+    case 'sasha':
+    case 'embi':
+      return ['summary', scope]
+    default:
+      return ['summary', 'by-prefix', scope]
+  }
+}
+
+export function useDashboardData(scope: SummaryScope | string, enabled = true) {
   const trendQuery = useQuery<TrendPoint[], Error>({
-    queryKey: ['trend', scope],
-    queryFn: () =>
-      isGeneral
-        ? fetchTrend()
-        : isSasha
-          ? fetchSashaTrend()
-          : fetchEmbiTrend(),
+    queryKey: getTrendQueryKey(scope),
+    queryFn: getTrendQueryFn(scope),
     enabled,
     staleTime: 60_000,
   })
 
   const summaryQuery = useQuery<SummaryResponse, Error>({
-    queryKey: ['summary', scope],
-    queryFn: () => fetchSummary(scope),
+    queryKey: getSummaryQueryKey(scope),
+    queryFn: getSummaryQueryFn(scope),
     enabled,
     staleTime: 60_000,
   })
@@ -54,24 +96,20 @@ export function useDashboardData(scope: SummaryScope, enabled = true) {
   }
 }
 
-export function usePrefetchDashboardData(scope: SummaryScope) {
-  useQueries({
-    queries: [
-      {
-        queryKey: ['trend', scope],
-        queryFn: () =>
-          scope === 'general'
-            ? fetchTrend()
-            : scope === 'sasha'
-              ? fetchSashaTrend()
-              : fetchEmbiTrend(),
-        staleTime: 60_000,
-      },
-      {
-        queryKey: ['summary', scope],
-        queryFn: () => fetchSummary(scope),
-        staleTime: 60_000,
-      },
-    ],
+export function usePrefetchDashboardData(scope: SummaryScope | string) {
+  const trendQuery = useQuery({
+    queryKey: getTrendQueryKey(scope),
+    queryFn: getTrendQueryFn(scope),
+    staleTime: 60_000,
+    enabled: false,
   })
+
+  const summaryQuery = useQuery({
+    queryKey: getSummaryQueryKey(scope),
+    queryFn: getSummaryQueryFn(scope),
+    staleTime: 60_000,
+    enabled: false,
+  })
+
+  return { trendQuery, summaryQuery }
 }

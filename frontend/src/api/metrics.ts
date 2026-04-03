@@ -96,6 +96,15 @@ export async function fetchEmbiPublishers(): Promise<SashaPublishersResponse> {
   return res.json() as Promise<SashaPublishersResponse>
 }
 
+export async function fetchMediaBuyer(prefix: string): Promise<SashaPublishersResponse> {
+  const res = await fetch(`/api/media-buyer/${encodeURIComponent(prefix)}`)
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error((body as { error?: string }).error ?? res.statusText)
+  }
+  return res.json() as Promise<SashaPublishersResponse>
+}
+
 export interface SummaryMetricTriple {
   prev: number
   current: number
@@ -128,6 +137,15 @@ export async function fetchSummary(scope: SummaryScope): Promise<SummaryResponse
   return res.json() as Promise<SummaryResponse>
 }
 
+export async function fetchSummaryByPrefix(prefix: string): Promise<SummaryResponse> {
+  const res = await fetch(`/api/summary/by-prefix/${encodeURIComponent(prefix)}`)
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error((body as { error?: string }).error ?? res.statusText)
+  }
+  return res.json() as Promise<SummaryResponse>
+}
+
 export async function fetchTrend(): Promise<TrendPoint[]> {
   const res = await fetch('/api/trend')
   if (!res.ok) {
@@ -150,6 +168,16 @@ export async function fetchSashaTrend(): Promise<TrendPoint[]> {
 
 export async function fetchEmbiTrend(): Promise<TrendPoint[]> {
   const res = await fetch('/api/trend/embi')
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error((body as { error?: string }).error ?? res.statusText)
+  }
+  const json = (await res.json()) as { data: TrendPoint[] }
+  return json.data
+}
+
+export async function fetchTrendByPrefix(prefix: string): Promise<TrendPoint[]> {
+  const res = await fetch(`/api/trend/by-prefix/${encodeURIComponent(prefix)}`)
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
     throw new Error((body as { error?: string }).error ?? res.statusText)
