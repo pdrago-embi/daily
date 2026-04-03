@@ -1,17 +1,21 @@
 import { useState } from 'react'
-import { useTrendQuery, useSashaTrendQuery, useEmbiTrendQuery } from './hooks'
+import { useDashboardData } from './hooks'
 import { TrendChart } from './components/TrendChart'
 import { KpiSummaryCards } from './components/KpiSummaryCards'
 import { ErrorBox, Loading, ToggleGroup } from './ui'
+import type { SummaryScope } from './types'
 
 type ChartTab = 'general' | 'sasha' | 'embi'
 
 export default function App() {
   const [chartTab, setChartTab] = useState<ChartTab>('general')
 
-  const trendQuery = useTrendQuery(chartTab === 'general')
-  const sashaTrendQuery = useSashaTrendQuery(chartTab === 'sasha')
-  const embiTrendQuery = useEmbiTrendQuery(chartTab === 'embi')
+  const { isPending, isError, error, data } = useDashboardData(
+    chartTab as SummaryScope,
+    true
+  )
+
+  const chartData = data?.trend ?? null
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -34,85 +38,30 @@ export default function App() {
           />
         </div>
 
-        {chartTab === 'general' && (
+        {isPending && (
+          <Loading message="Cargando gráfico y resumen..." />
+        )}
+        {isError && (
+          <ErrorBox
+            message={
+              error instanceof Error
+                ? error.message
+                : 'Error al cargar datos'
+            }
+          />
+        )}
+        {chartData && data?.summary && (
           <>
-            {trendQuery.isPending && <Loading message="Cargando gráfico..." />}
-            {trendQuery.isError && (
-              <ErrorBox
-                message={
-                  trendQuery.error instanceof Error
-                    ? trendQuery.error.message
-                    : 'Error al cargar tendencia'
-                }
-              />
-            )}
-            {trendQuery.data && (
-              <>
-                <TrendChart data={trendQuery.data} />
-                <div className="mt-8">
-                  <KpiSummaryCards scope="general" />
-                </div>
-              </>
-            )}
+            <TrendChart data={chartData} />
+            <div className="mt-8">
+              <KpiSummaryCards summary={data.summary} />
+            </div>
           </>
         )}
-
-        {chartTab === 'sasha' && (
-          <>
-            {sashaTrendQuery.isPending && <Loading message="Cargando Stats Sasha..." />}
-            {sashaTrendQuery.isError && (
-              <ErrorBox
-                message={
-                  sashaTrendQuery.error instanceof Error
-                    ? sashaTrendQuery.error.message
-                    : 'Error al cargar Stats Sasha'
-                }
-              />
-            )}
-            {sashaTrendQuery.data &&
-              (sashaTrendQuery.data.length === 0 ? (
-                <p className="py-16 text-center text-slate-500">
-                  No hay publishers con nombre que empiece por &quot;SB&quot; en
-                  el descubrimiento de la API, o no hay datos en el rango.
-                </p>
-              ) : (
-                <>
-                  <TrendChart data={sashaTrendQuery.data} />
-                  <div className="mt-8">
-                    <KpiSummaryCards scope="sasha" />
-                  </div>
-                </>
-              ))}
-          </>
-        )}
-
-        {chartTab === 'embi' && (
-          <>
-            {embiTrendQuery.isPending && <Loading message="Cargando Stats Embi..." />}
-            {embiTrendQuery.isError && (
-              <ErrorBox
-                message={
-                  embiTrendQuery.error instanceof Error
-                    ? embiTrendQuery.error.message
-                    : 'Error al cargar Stats Embi'
-                }
-              />
-            )}
-            {embiTrendQuery.data &&
-              (embiTrendQuery.data.length === 0 ? (
-                <p className="py-16 text-center text-slate-500">
-                  No hay publishers con nombre que empiece por &quot;EM&quot; en
-                  el descubrimiento de la API, o no hay datos en el rango.
-                </p>
-              ) : (
-                <>
-                  <TrendChart data={embiTrendQuery.data} />
-                  <div className="mt-8">
-                    <KpiSummaryCards scope="embi" />
-                  </div>
-                </>
-              ))}
-          </>
+        {!isPending && !chartData && !isError && (
+          <p className="py-16 text-center text-slate-500">
+            No hay datos para el período seleccionado.
+          </p>
         )}
       </section>
     </div>

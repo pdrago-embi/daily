@@ -1,7 +1,14 @@
 import { useEmbiPublishersQuery } from '../hooks'
 import { PublishersPage } from './PublishersPage'
+import type { SashaPublishersResponse } from '../api/metrics'
 
 export function EmbiPublishersPage() {
   const query = useEmbiPublishersQuery(true)
-  return <PublishersPage title="Embi Media" query={query} />
+  const adaptedQuery = {
+    isPending: query.isPending,
+    isError: query.isError,
+    error: query.error,
+    data: query.data ?? null,
+  } as { isPending: boolean; isError: boolean; error: Error | null; data: SashaPublishersResponse | null }
+  return <PublishersPage title="Embi Media" query={adaptedQuery} />
 }

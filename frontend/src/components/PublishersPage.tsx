@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
-import { ErrorBox, Loading } from '../ui'
+import { ErrorBox, Loading, SortHeader } from '../ui'
 import { formatCurrency, formatNumber } from '../utils/formatters'
+import type { SashaPublishersResponse } from '../api/metrics'
 
 type SortKey = 'publisher_name' | 'adRequests' | 'impressions' | 'revenue' | 'cost' | 'profit' | 'date'
 type SortDirection = 'asc' | 'desc'
@@ -8,7 +9,12 @@ type TabType = 'publisher' | 'day'
 
 interface PublishersPageProps {
   title: string
-  query: any
+  query: {
+    isPending: boolean
+    isError: boolean
+    error: Error | null
+    data: SashaPublishersResponse | null
+  }
 }
 
 export function PublishersPage({ title, query }: PublishersPageProps) {
@@ -16,7 +22,8 @@ export function PublishersPage({ title, query }: PublishersPageProps) {
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
   const [activeTab, setActiveTab] = useState<TabType>('publisher')
 
-  const handleSort = (key: SortKey) => {
+  const handleSort = (column: string) => {
+    const key = column as SortKey
     if (sortKey === key) {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')
     } else {
@@ -28,8 +35,8 @@ export function PublishersPage({ title, query }: PublishersPageProps) {
   const sortedPublishers = useMemo(() => {
     if (!query.data?.publishers) return []
     return [...query.data.publishers].sort((a, b) => {
-      const aVal = (a as any)[sortKey]
-      const bVal = (b as any)[sortKey]
+      const aVal = a[sortKey as keyof typeof a]
+      const bVal = b[sortKey as keyof typeof b]
       if (typeof aVal === 'string' && typeof bVal === 'string') {
         return sortDirection === 'asc' 
           ? aVal.localeCompare(bVal)
@@ -44,8 +51,8 @@ export function PublishersPage({ title, query }: PublishersPageProps) {
   const sortedDaily = useMemo(() => {
     if (!query.data?.daily) return []
     return [...query.data.daily].sort((a, b) => {
-      const aVal = (a as any)[sortKey]
-      const bVal = (b as any)[sortKey]
+      const aVal = a[sortKey as keyof typeof a]
+      const bVal = b[sortKey as keyof typeof b]
       if (sortKey === 'date') {
         return sortDirection === 'asc' 
           ? (aVal as string).localeCompare(bVal as string)
@@ -61,22 +68,6 @@ export function PublishersPage({ title, query }: PublishersPageProps) {
         : (bVal as number) - (aVal as number)
     })
   }, [query.data?.daily, sortKey, sortDirection])
-
-  const SortHeader = ({ label, sortColumnKey, align = 'left', onSort, currentSortKey, currentSortDirection }: { label: string, sortColumnKey: string, align?: 'left' | 'right', onSort: (key: string) => void, currentSortKey: string, currentSortDirection: SortDirection }) => (
-    <th 
-      className={`whitespace-nowrap px-3 py-3 font-medium cursor-pointer hover:text-violet-300 transition-colors sm:px-4 ${align === 'right' ? 'text-right' : ''}`}
-      onClick={() => onSort(sortColumnKey)}
-    >
-      <div className="flex items-center gap-1">
-        {label}
-        {currentSortKey === sortColumnKey && (
-          <span className="text-violet-300">
-            {currentSortDirection === 'asc' ? '↑' : '↓'}
-          </span>
-        )}
-      </div>
-    </th>
-  )
 
   if (query.isPending) {
     return (
@@ -247,12 +238,12 @@ export function PublishersPage({ title, query }: PublishersPageProps) {
                 <table className="w-full min-w-[800px] text-left text-sm">
                   <thead>
                     <tr className="border-b border-slate-800 text-xs text-slate-500">
-                      <SortHeader label="Publisher" sortColumnKey="publisher_name" onSort={handleSort as (key: string) => void} currentSortKey={sortKey} currentSortDirection={sortDirection} />
-                      <SortHeader label="Ad Requests" sortColumnKey="adRequests" align="right" onSort={handleSort as (key: string) => void} currentSortKey={sortKey} currentSortDirection={sortDirection} />
-                      <SortHeader label="Impresiones" sortColumnKey="impressions" align="right" onSort={handleSort as (key: string) => void} currentSortKey={sortKey} currentSortDirection={sortDirection} />
-                      <SortHeader label="Revenue" sortColumnKey="revenue" align="right" onSort={handleSort as (key: string) => void} currentSortKey={sortKey} currentSortDirection={sortDirection} />
-                      <SortHeader label="Cost" sortColumnKey="cost" align="right" onSort={handleSort as (key: string) => void} currentSortKey={sortKey} currentSortDirection={sortDirection} />
-                      <SortHeader label="Profit" sortColumnKey="profit" align="right" onSort={handleSort as (key: string) => void} currentSortKey={sortKey} currentSortDirection={sortDirection} />
+                      <SortHeader label="Publisher" column="publisher_name" activeColumn={sortKey} direction={sortDirection} onSort={handleSort} />
+                      <SortHeader label="Ad Requests" column="adRequests" align="right" activeColumn={sortKey} direction={sortDirection} onSort={handleSort} />
+                      <SortHeader label="Impresiones" column="impressions" align="right" activeColumn={sortKey} direction={sortDirection} onSort={handleSort} />
+                      <SortHeader label="Revenue" column="revenue" align="right" activeColumn={sortKey} direction={sortDirection} onSort={handleSort} />
+                      <SortHeader label="Cost" column="cost" align="right" activeColumn={sortKey} direction={sortDirection} onSort={handleSort} />
+                      <SortHeader label="Profit" column="profit" align="right" activeColumn={sortKey} direction={sortDirection} onSort={handleSort} />
                     </tr>
                   </thead>
                   <tbody>
@@ -299,12 +290,12 @@ export function PublishersPage({ title, query }: PublishersPageProps) {
                 <table className="w-full min-w-[800px] text-left text-sm">
                   <thead>
                     <tr className="border-b border-slate-800 text-xs text-slate-500">
-                      <SortHeader label="Fecha" sortColumnKey="date" onSort={handleSort as (key: string) => void} currentSortKey={sortKey} currentSortDirection={sortDirection} />
-                      <SortHeader label="Ad Requests" sortColumnKey="adRequests" align="right" onSort={handleSort as (key: string) => void} currentSortKey={sortKey} currentSortDirection={sortDirection} />
-                      <SortHeader label="Impresiones" sortColumnKey="impressions" align="right" onSort={handleSort as (key: string) => void} currentSortKey={sortKey} currentSortDirection={sortDirection} />
-                      <SortHeader label="Revenue" sortColumnKey="revenue" align="right" onSort={handleSort as (key: string) => void} currentSortKey={sortKey} currentSortDirection={sortDirection} />
-                      <SortHeader label="Cost" sortColumnKey="cost" align="right" onSort={handleSort as (key: string) => void} currentSortKey={sortKey} currentSortDirection={sortDirection} />
-                      <SortHeader label="Profit" sortColumnKey="profit" align="right" onSort={handleSort as (key: string) => void} currentSortKey={sortKey} currentSortDirection={sortDirection} />
+                      <SortHeader label="Fecha" column="date" activeColumn={sortKey} direction={sortDirection} onSort={handleSort} />
+                      <SortHeader label="Ad Requests" column="adRequests" align="right" activeColumn={sortKey} direction={sortDirection} onSort={handleSort} />
+                      <SortHeader label="Impresiones" column="impressions" align="right" activeColumn={sortKey} direction={sortDirection} onSort={handleSort} />
+                      <SortHeader label="Revenue" column="revenue" align="right" activeColumn={sortKey} direction={sortDirection} onSort={handleSort} />
+                      <SortHeader label="Cost" column="cost" align="right" activeColumn={sortKey} direction={sortDirection} onSort={handleSort} />
+                      <SortHeader label="Profit" column="profit" align="right" activeColumn={sortKey} direction={sortDirection} onSort={handleSort} />
                     </tr>
                   </thead>
                   <tbody>

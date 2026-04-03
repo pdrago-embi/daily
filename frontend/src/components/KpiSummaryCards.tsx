@@ -1,32 +1,13 @@
-import { useSummaryQuery } from '../hooks'
-import { ErrorBox, Loading } from '../ui'
 import { formatCurrency, formatNumber } from '../utils/formatters'
-import type { SummaryScope } from '../types'
+import type { SummaryResponse } from '../api/metrics'
 
-export function KpiSummaryCards({ scope }: { scope: SummaryScope }) {
-  const query = useSummaryQuery(scope)
+interface KpiSummaryCardsProps {
+  summary: SummaryResponse
+}
 
-  if (query.isPending) {
-    return (
-      <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4 text-center text-sm text-slate-500 md:p-6">
-        <Loading message="Cargando resumen mensual..." />
-      </div>
-    )
-  }
+export function KpiSummaryCards({ summary }: KpiSummaryCardsProps) {
+  const d = summary
 
-  if (query.isError) {
-    return (
-      <ErrorBox
-        message={
-          query.error instanceof Error
-            ? query.error.message
-            : 'Error al cargar resumen'
-        }
-      />
-    )
-  }
-
-  const d = query.data
   if (!d) return null
 
   const noCurrentData = !d.hasCurrentMonthData

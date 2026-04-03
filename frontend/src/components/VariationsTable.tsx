@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useVariationsQuery } from '../hooks'
-import { ErrorBox, Loading, ToggleGroup } from '../ui'
-import { formatCurrency, formatPercentage, formatNumber } from '../utils/formatters'
+import { ErrorBox, Loading, ToggleGroup, SortHeader, DeltaCell, DeltaPctCell } from '../ui'
+import { formatCurrency, formatNumber } from '../utils/formatters'
 import type { VariationRow, VariationPeriod, VariationAggregate } from '../types'
 
 type SortCol =
@@ -15,35 +15,6 @@ type SortCol =
   | 'adRequestsPrevious'
   | 'delta'
   | 'deltaPct'
-
-function DeltaCell({ delta, isCurrency = true }: { delta: number; isCurrency?: boolean }) {
-  const positive = delta >= 0
-  return (
-    <span
-      className={
-        positive ? 'font-medium text-emerald-400' : 'font-medium text-rose-400'
-      }
-    >
-      {positive ? '+' : ''}
-      {isCurrency 
-        ? formatCurrency(delta, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-        : formatNumber(delta)
-      }
-    </span>
-  )
-}
-
-function DeltaPctCell({ deltaPct }: { deltaPct: number | null }) {
-  if (deltaPct === null) {
-    return <span className="text-slate-500">—</span>
-  }
-  const positive = deltaPct >= 0
-  return (
-    <span className={positive ? 'text-emerald-400' : 'text-rose-400'}>
-      {formatPercentage(deltaPct)}
-    </span>
-  )
-}
 
 function compareRows(
   a: VariationRow,
@@ -84,38 +55,6 @@ function compareRows(
   }
 }
 
-function SortHeader({
-  label,
-  col,
-  activeCol,
-  dir,
-  onSort,
-  title,
-}: {
-  label: string
-  col: SortCol
-  activeCol: SortCol | null
-  dir: 'asc' | 'desc'
-  onSort: (col: SortCol) => void
-  title?: string
-}) {
-  const active = activeCol === col
-  const arrow = !active ? '' : dir === 'asc' ? ' ↑' : ' ↓'
-  return (
-    <th className="max-w-[200px] px-2 py-3 font-medium align-bottom">
-      <button
-        type="button"
-        title={title ?? label}
-        onClick={() => onSort(col)}
-        className="inline-flex w-full flex-col items-start gap-0.5 text-left text-slate-400 hover:text-slate-200"
-      >
-        <span className="text-xs leading-tight">{label}</span>
-        <span className="text-slate-500">{arrow}</span>
-      </button>
-    </th>
-  )
-}
-
 function Section({
   title,
   rows,
@@ -136,12 +75,13 @@ function Section({
   
   const nameLabel = title === 'Networks por publisher' ? 'Network' : 'Nombre'
 
-  const handleSort = (col: SortCol) => {
-    if (sortCol === col) {
+  const handleSort = (col: string) => {
+    const sortColumn = col as SortCol
+    if (sortCol === sortColumn) {
       setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
     } else {
-      setSortCol(col)
-      setSortDir(col === 'name' || col === 'publisherName' ? 'asc' : 'desc')
+      setSortCol(sortColumn)
+      setSortDir(sortColumn === 'name' || sortColumn === 'publisherName' ? 'asc' : 'desc')
     }
   }
 
@@ -159,6 +99,16 @@ function Section({
     )
   }
 
+  const getColumnForMetric = (metricType: 'current' | 'previous') => {
+    if (metric === 'revenue') return metricType === 'current' ? 'revenueCurrent' : 'revenuePrevious'
+    if (metric === 'impressions') return metricType === 'current' ? 'impressionsCurrent' : 'impressionsPrevious'
+    return metricType === 'current' ? 'adRequestsCurrent' : 'adRequestsPrevious'
+  }
+
+  const deltaColumn = metric === 'revenue' ? 'delta' : metric === 'impressions' ? 'delta' : 'delta'
+  const deltaPctColumn = 'deltaPct'
+  const deltaLabel = metric === 'revenue' ? 'Δ $' : metric === 'impressions' ? 'Δ imp' : 'Δ ar'
+
   return (
     <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/50">
       <div className="border-b border-slate-800 px-4 py-3">
@@ -172,49 +122,53 @@ function Section({
             <tr className="border-b border-slate-800 text-slate-400">
               <SortHeader
                 label={nameLabel}
-                col="name"
-                activeCol={sortCol}
-                dir={sortDir}
+                column="name"
+                activeColumn={sortCol}
+                direction={sortDir}
                 onSort={handleSort}
               />
               {showPublisher && (
                 <SortHeader
                   label="Publisher"
-                  col="publisherName"
-                  activeCol={sortCol}
-                  dir={sortDir}
+                  column="publisherName"
+                  activeColumn={sortCol}
+                  direction={sortDir}
                   onSort={handleSort}
                 />
               )}
               <SortHeader
                 label={periodCurrentLabel}
-                col={metric === 'revenue' ? 'revenueCurrent' : metric === 'impressions' ? 'impressionsCurrent' : 'adRequestsCurrent'}
-                activeCol={sortCol}
-                dir={sortDir}
+                column={getColumnForMetric('current')}
+                activeColumn={sortCol}
+                direction={sortDir}
                 onSort={handleSort}
                 title={periodCurrentLabel}
+                align="right"
               />
               <SortHeader
                 label={periodPreviousLabel}
-                col={metric === 'revenue' ? 'revenuePrevious' : metric === 'impressions' ? 'impressionsPrevious' : 'adRequestsPrevious'}
-                activeCol={sortCol}
-                dir={sortDir}
+                column={getColumnForMetric('previous')}
+                activeColumn={sortCol}
+                direction={sortDir}
                 onSort={handleSort}
                 title={periodPreviousLabel}
+                align="right"
               />
               <SortHeader
-                label={metric === 'revenue' ? 'Δ $' : metric === 'impressions' ? 'Δ imp' : 'Δ ar'}
-                col="delta"
-                activeCol={sortCol}
-                dir={sortDir}
+                label={deltaLabel}
+                column={deltaColumn}
+                activeColumn={sortCol}
+                direction={sortDir}
                 onSort={handleSort}
+                align="right"
               />
               <SortHeader
                 label="Δ %"
-                col="deltaPct"
-                activeCol={sortCol}
-                dir={sortDir}
+                column={deltaPctColumn}
+                activeColumn={sortCol}
+                direction={sortDir}
                 onSort={handleSort}
+                align="right"
               />
             </tr>
           </thead>
@@ -232,7 +186,7 @@ function Section({
                     {r.publisherName ?? '—'}
                   </td>
                 )}
-                <td className="px-2 py-3 text-slate-300">
+                <td className="px-2 py-3 text-right text-slate-300">
                   {metric === 'revenue' 
                     ? formatCurrency(r.revenueCurrent, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                     : metric === 'impressions'
@@ -240,7 +194,7 @@ function Section({
                       : formatNumber(r.adRequestsCurrent ?? 0)
                   }
                 </td>
-                <td className="px-2 py-3 text-slate-300">
+                <td className="px-2 py-3 text-right text-slate-300">
                   {metric === 'revenue'
                     ? formatCurrency(r.revenuePrevious, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                     : metric === 'impressions'
@@ -248,13 +202,13 @@ function Section({
                       : formatNumber(r.adRequestsPrevious ?? 0)
                   }
                 </td>
-                <td className="px-2 py-3">
+                <td className="px-2 py-3 text-right">
                   <DeltaCell 
                     delta={metric === 'revenue' ? r.delta : metric === 'impressions' ? (r.impressionsDelta ?? 0) : (r.adRequestsDelta ?? 0)} 
-                    isCurrency={metric === 'revenue'} 
+                    format={metric === 'revenue' ? 'money' : 'int'}
                   />
                 </td>
-                <td className="px-2 py-3">
+                <td className="px-2 py-3 text-right">
                   <DeltaPctCell deltaPct={metric === 'revenue' ? r.deltaPct : metric === 'impressions' ? r.impressionsDeltaPct ?? null : r.adRequestsDeltaPct ?? null} />
                 </td>
               </tr>
