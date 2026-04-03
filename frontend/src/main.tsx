@@ -8,7 +8,7 @@ import { Layout } from './components/Layout'
 import App from './App'
 import { SashaPublishersPage } from './components/SashaPublishersPage'
 import { EmbiPublishersPage } from './components/EmbiPublishersPage'
-import { RevenueVariationsPage, ImpressionsVariationsPage } from './components/VariationsPages'
+import { RevenueVariationsPage, ImpressionsVariationsPage, AdRequestsVariationsPage } from './components/VariationsPages'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -26,6 +26,7 @@ function DashboardRoutes() {
         <Route path="/" element={<App />} />
         <Route path="/variaciones/revenue" element={<RevenueVariationsPage />} />
         <Route path="/variaciones/impressions" element={<ImpressionsVariationsPage />} />
+        <Route path="/variaciones/ad-requests" element={<AdRequestsVariationsPage />} />
         <Route path="/media-buyers/sasha-balbi" element={<SashaPublishersPage />} />
         <Route path="/media-buyers/embi-media" element={<EmbiPublishersPage />} />
       </Routes>

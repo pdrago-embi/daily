@@ -3,6 +3,8 @@ export interface TrendPoint {
   revenue: number
   cost: number
   profit: number
+  dayOfWeek?: number
+  isMonthStart?: boolean
 }
 
 export type TrendScope = 'general' | 'sasha'

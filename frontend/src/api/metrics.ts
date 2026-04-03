@@ -17,11 +17,15 @@ export interface VariationRow {
   impressionsPrevious?: number
   impressionsDelta?: number
   impressionsDeltaPct?: number | null
+  adRequestsCurrent?: number
+  adRequestsPrevious?: number
+  adRequestsDelta?: number
+  adRequestsDeltaPct?: number | null
 }
 
 export type VariationPeriod = 'day' | 'week' | 'month'
 export type VariationAggregate = 'total' | 'avg'
-export type VariationMetric = 'revenue' | 'impressions'
+export type VariationMetric = 'revenue' | 'impressions' | 'ad_requests'
 
 export interface VariationsResponse {
   period: VariationPeriod

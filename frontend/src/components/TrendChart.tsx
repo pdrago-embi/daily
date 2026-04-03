@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import {
   LineChart,
   Line,
@@ -7,6 +7,8 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  ReferenceArea,
+  ReferenceLine,
 } from 'recharts'
 import type { TrendPoint } from '../types'
 import { formatCurrencyCompact } from '../utils/formatters'
@@ -87,11 +89,46 @@ export function TrendChart({ data }: { data: TrendPoint[] }) {
 
   const today = getTodayDateString()
   const filteredData = data.filter(p => p.date !== today)
-  
-  const chartData = filteredData.map((p) => ({
-    ...p,
-    label: formatAxisDate(p.date),
-  }))
+
+  const chartData = useMemo(() => {
+    let prevMonth = ''
+    return filteredData.map((p) => {
+      const date = new Date(p.date + 'T00:00:00')
+      const dayOfWeek = date.getDay()
+      const currentMonth = p.date.substring(0, 7)
+      const isMonthStart = prevMonth !== '' && prevMonth !== currentMonth
+      prevMonth = currentMonth
+      return {
+        ...p,
+        label: formatAxisDate(p.date),
+        dayOfWeek,
+        isMonthStart,
+      }
+    })
+  }, [filteredData])
+
+  const referenceAreas = useMemo(() => {
+    const weekendAreas: { x1: string; x2: string }[] = []
+    const monthStartIndices: number[] = []
+
+    let i = 0
+    while (i < chartData.length) {
+      if (chartData[i].dayOfWeek === 0 || chartData[i].dayOfWeek === 6) {
+        let start = i
+        while (i < chartData.length && (chartData[i].dayOfWeek === 0 || chartData[i].dayOfWeek === 6)) {
+          i++
+        }
+        weekendAreas.push({ x1: chartData[start].label, x2: chartData[i - 1].label })
+      } else if (chartData[i].isMonthStart && i > 0) {
+        monthStartIndices.push(i)
+        i++
+      } else {
+        i++
+      }
+    }
+
+    return { weekendAreas, monthStartIndices }
+  }, [chartData])
 
   const toggleLine = (key: string) => {
     setVisibleLines(prev => {
@@ -126,7 +163,7 @@ export function TrendChart({ data }: { data: TrendPoint[] }) {
               dataKey="label"
               tick={{ fill: '#94a3b8', fontSize: compactChart ? 10 : 11 }}
               tickMargin={compactChart ? 6 : 8}
-              interval={0}
+              interval="preserveStartEnd"
             />
             <YAxis
               tick={{ fill: '#94a3b8', fontSize: compactChart ? 10 : 11 }}
@@ -149,6 +186,24 @@ export function TrendChart({ data }: { data: TrendPoint[] }) {
                 return p?.date ?? ''
               }}
             />
+            {referenceAreas.weekendAreas.map((area, i) => (
+              <ReferenceArea
+                key={`weekend-${i}`}
+                x1={area.x1}
+                x2={area.x2}
+                fill="#3b82f6"
+                fillOpacity={0.15}
+                strokeWidth={0}
+              />
+            ))}
+            {referenceAreas.monthStartIndices.map((idx, i) => (
+              <ReferenceLine
+                key={`month-${i}`}
+                x={chartData[idx].label}
+                stroke="#f59e0b"
+                strokeWidth={3}
+              />
+            ))}
             {CHART_LINES.map(line => (
               visibleLines.has(line.key) && (
                 <Line

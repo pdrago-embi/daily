@@ -25,3 +25,16 @@ export function ImpressionsVariationsPage() {
     </div>
   )
 }
+
+export function AdRequestsVariationsPage() {
+  return (
+    <div className="mx-auto max-w-6xl">
+      <section>
+        <h2 className="mb-6 text-center text-xl font-semibold text-slate-100">
+          Principales Variaciones - Ad Requests
+        </h2>
+        <VariationsTable metric="ad_requests" />
+      </section>
+    </div>
+  )
+}

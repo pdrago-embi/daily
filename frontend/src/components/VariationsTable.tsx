@@ -11,6 +11,8 @@ type SortCol =
   | 'revenuePrevious'
   | 'impressionsCurrent'
   | 'impressionsPrevious'
+  | 'adRequestsCurrent'
+  | 'adRequestsPrevious'
   | 'delta'
   | 'deltaPct'
 
@@ -127,7 +129,7 @@ function Section({
   showPublisher?: boolean
   periodCurrentLabel: string
   periodPreviousLabel: string
-  metric: 'revenue' | 'impressions'
+  metric: 'revenue' | 'impressions' | 'ad_requests'
 }) {
   const [sortCol, setSortCol] = useState<SortCol | null>(null)
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
@@ -186,7 +188,7 @@ function Section({
               )}
               <SortHeader
                 label={periodCurrentLabel}
-                col={metric === 'revenue' ? 'revenueCurrent' : 'impressionsCurrent'}
+                col={metric === 'revenue' ? 'revenueCurrent' : metric === 'impressions' ? 'impressionsCurrent' : 'adRequestsCurrent'}
                 activeCol={sortCol}
                 dir={sortDir}
                 onSort={handleSort}
@@ -194,14 +196,14 @@ function Section({
               />
               <SortHeader
                 label={periodPreviousLabel}
-                col={metric === 'revenue' ? 'revenuePrevious' : 'impressionsPrevious'}
+                col={metric === 'revenue' ? 'revenuePrevious' : metric === 'impressions' ? 'impressionsPrevious' : 'adRequestsPrevious'}
                 activeCol={sortCol}
                 dir={sortDir}
                 onSort={handleSort}
                 title={periodPreviousLabel}
               />
               <SortHeader
-                label={metric === 'revenue' ? 'Δ $' : 'Δ imp'}
+                label={metric === 'revenue' ? 'Δ $' : metric === 'impressions' ? 'Δ imp' : 'Δ ar'}
                 col="delta"
                 activeCol={sortCol}
                 dir={sortDir}
@@ -233,20 +235,27 @@ function Section({
                 <td className="px-2 py-3 text-slate-300">
                   {metric === 'revenue' 
                     ? formatCurrency(r.revenueCurrent, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                    : formatNumber(r.impressionsCurrent ?? 0)
+                    : metric === 'impressions'
+                      ? formatNumber(r.impressionsCurrent ?? 0)
+                      : formatNumber(r.adRequestsCurrent ?? 0)
                   }
                 </td>
                 <td className="px-2 py-3 text-slate-300">
                   {metric === 'revenue'
                     ? formatCurrency(r.revenuePrevious, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                    : formatNumber(r.impressionsPrevious ?? 0)
+                    : metric === 'impressions'
+                      ? formatNumber(r.impressionsPrevious ?? 0)
+                      : formatNumber(r.adRequestsPrevious ?? 0)
                   }
                 </td>
                 <td className="px-2 py-3">
-                  <DeltaCell delta={metric === 'revenue' ? r.delta : (r.impressionsDelta ?? 0)} isCurrency={metric === 'revenue'} />
+                  <DeltaCell 
+                    delta={metric === 'revenue' ? r.delta : metric === 'impressions' ? (r.impressionsDelta ?? 0) : (r.adRequestsDelta ?? 0)} 
+                    isCurrency={metric === 'revenue'} 
+                  />
                 </td>
                 <td className="px-2 py-3">
-                  <DeltaPctCell deltaPct={metric === 'revenue' ? r.deltaPct : r.impressionsDeltaPct ?? null} />
+                  <DeltaPctCell deltaPct={metric === 'revenue' ? r.deltaPct : metric === 'impressions' ? r.impressionsDeltaPct ?? null : r.adRequestsDeltaPct ?? null} />
                 </td>
               </tr>
             ))}
@@ -259,7 +268,7 @@ function Section({
 
 type VariationsEntityTab = 'publishers' | 'networks'
 
-type Metric = 'revenue' | 'impressions'
+type Metric = 'revenue' | 'impressions' | 'ad_requests'
 
 interface VariationsTableProps {
   metric?: Metric
