@@ -1,5 +1,6 @@
 export { ErrorBox } from './ErrorBox'
 export { Loading } from './Loading'
+export { Skeleton, SkeletonChart, SkeletonCards, SkeletonTopTen, SkeletonTable } from './Skeleton'
 export { Button } from './Button'
 export { ToggleGroup } from './ToggleGroup'
 export { ThemeToggle } from './ThemeToggle'

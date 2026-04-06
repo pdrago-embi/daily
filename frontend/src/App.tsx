@@ -3,8 +3,27 @@ import { useDashboardData, useMediaBuyers } from './hooks'
 import { TrendChart } from './components/TrendChart'
 import { KpiSummaryCards } from './components/KpiSummaryCards'
 import { TopTenByRevenue } from './components/TopTenByRevenue'
-import { ErrorBox, Loading, ToggleGroup } from './ui'
+import { DroppedAdUnits } from './components/DroppedAdUnits'
+import { ErrorBox, SkeletonChart, SkeletonCards, ToggleGroup } from './ui'
 import type { SummaryScope } from './types'
+
+function DashboardSkeleton({ scope }: { scope: string }) {
+  return (
+    <>
+      <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-xl font-semibold text-slate-100">
+            Evolución diaria {scope !== 'general' && <span className="text-cyan-400">· {scope}</span>}
+          </h2>
+        </div>
+      </div>
+      <SkeletonChart />
+      <div className="mt-8">
+        <SkeletonCards />
+      </div>
+    </>
+  )
+}
 
 export default function App() {
   const [chartTab, setChartTab] = useState<string>('general')
@@ -39,9 +58,7 @@ export default function App() {
           />
         </div>
 
-        {isPending && (
-          <Loading message="Cargando gráfico y resumen..." />
-        )}
+        {isPending && <DashboardSkeleton scope={chartTab} />}
         {isError && (
           <ErrorBox
             message={
@@ -67,6 +84,7 @@ export default function App() {
       </section>
 
       <TopTenByRevenue scope={chartTab} />
+      <DroppedAdUnits scope={chartTab} />
     </div>
   )
 }

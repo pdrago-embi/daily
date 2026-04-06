@@ -6,6 +6,7 @@ interface SortHeaderProps {
   onSort: (column: string) => void
   align?: 'left' | 'right'
   title?: string
+  className?: string
 }
 
 export function SortHeader({
@@ -16,13 +17,14 @@ export function SortHeader({
   onSort,
   align = 'left',
   title,
+  className = '',
 }: SortHeaderProps) {
   const isActive = activeColumn === column
   const arrow = !isActive ? '' : direction === 'asc' ? ' ↑' : ' ↓'
 
   return (
     <th
-      className={`whitespace-nowrap px-2 py-3 font-medium cursor-pointer hover:text-violet-300 transition-colors sm:px-4 ${
+      className={`whitespace-nowrap px-2 py-3 font-medium cursor-pointer hover:text-violet-300 transition-colors sm:px-4 ${className} ${
         align === 'right' ? 'text-right' : ''
       }`}
       onClick={() => onSort(column)}

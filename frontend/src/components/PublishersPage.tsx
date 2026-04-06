@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { ErrorBox, Loading, SortHeader } from '../ui'
+import { ErrorBox, Skeleton, SkeletonTable, SortHeader } from '../ui'
 import { formatCurrency, formatNumber } from '../utils/formatters'
 import type { MediaBuyer } from '../utils/mediaBuyers'
 import { useMediaBuyerQuery } from '../hooks'
@@ -67,8 +67,28 @@ export function PublishersPage({ buyer }: PublishersPageProps) {
 
   if (query.isPending) {
     return (
-      <div className="mx-auto max-w-6xl px-4 py-10">
-        <Loading message={`Cargando publishers de ${buyer.name}...`} />
+      <div className="mx-auto max-w-6xl">
+        <section className="mb-12 rounded-2xl border border-slate-800 bg-slate-900/40 p-4 shadow-xl backdrop-blur md:p-6">
+          <div className="mb-6">
+            <Skeleton className="h-7 w-64 mb-2" />
+            <Skeleton className="h-4 w-48" />
+          </div>
+          <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/60 shadow-inner">
+            <div className="p-4 space-y-3">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="flex justify-between items-center">
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-4 w-32" />
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+        <section className="rounded-2xl border border-slate-800 bg-slate-900/40 p-4 shadow-xl backdrop-blur md:p-6">
+          <Skeleton className="h-6 w-32 mb-4" />
+          <SkeletonTable rows={10} />
+        </section>
       </div>
     )
   }

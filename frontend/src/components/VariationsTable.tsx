@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useVariationsQuery } from '../hooks'
-import { ErrorBox, Loading, ToggleGroup, SortHeader, DeltaCell, DeltaPctCell } from '../ui'
+import { ErrorBox, SkeletonTable, ToggleGroup, SortHeader, DeltaCell, DeltaPctCell } from '../ui'
 import { formatCurrency, formatNumber } from '../utils/formatters'
 import type { VariationRow, VariationPeriod, VariationAggregate } from '../types'
 
@@ -295,7 +295,17 @@ export function VariationsTable({ metric = 'revenue' }: VariationsTableProps) {
         />
       </div>
 
-      {query.isPending && <Loading message="Cargando tablas..." />}
+      {query.isPending && (
+        <>
+          <p className="mb-4 text-center text-sm text-slate-500">
+            Cargando variaciones...
+          </p>
+          <div className="space-y-8">
+            <SkeletonTable rows={10} />
+            <SkeletonTable rows={10} />
+          </div>
+        </>
+      )}
       {query.isError && (
         <ErrorBox
           message={

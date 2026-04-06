@@ -4,6 +4,7 @@ import { useTheme } from '../hooks/useTheme'
 import { useMediaBuyers } from '../hooks/useMediaBuyers'
 import { ThemeToggle } from '../ui'
 import { AddMediaBuyerModal, RemoveMediaBuyerModal, EditMediaBuyerModal } from './MediaBuyerModals'
+import { AlertModal, getAlertCookie } from './AlertModal'
 
 interface LayoutProps {
   children: ReactNode
@@ -15,6 +16,7 @@ export function Layout({ children }: LayoutProps) {
   const [showAddModal, setShowAddModal] = useState(false)
   const [buyerToRemove, setBuyerToRemove] = useState<string | null>(null)
   const [buyerToEdit, setBuyerToEdit] = useState<string | null>(null)
+  const [showAlertModal, setShowAlertModal] = useState(!getAlertCookie())
   const location = useLocation()
   const { theme } = useTheme()
   const { buyers, add, remove, update, isLocked, setLocked } = useMediaBuyers()
@@ -41,6 +43,9 @@ export function Layout({ children }: LayoutProps) {
 
   return (
     <>
+      {showAlertModal && (
+        <AlertModal onClose={() => setShowAlertModal(false)} />
+      )}
       <AddMediaBuyerModal
         isOpen={showAddModal}
         onClose={() => setShowAddModal(false)}
@@ -100,7 +105,23 @@ export function Layout({ children }: LayoutProps) {
               />
             </Link>
           </div>
-          <ThemeToggle />
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowAlertModal(true)}
+              title="Alertas de actividad"
+              className={`relative p-2 rounded-lg transition-colors ${
+                isDark
+                  ? 'text-slate-300 hover:bg-slate-800 hover:text-amber-400'
+                  : 'text-slate-700 hover:bg-slate-100 hover:text-amber-600'
+              }`}
+            >
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+              </svg>
+            </button>
+            <ThemeToggle />
+          </div>
         </header>
 
         {mobileMenuOpen && (

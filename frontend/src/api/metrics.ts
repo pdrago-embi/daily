@@ -241,3 +241,108 @@ export async function fetchTopTen(period?: TopTenPeriod, metric?: TopTenMetric, 
   }
   return res.json() as Promise<TopTenResponse>
 }
+
+export interface DroppedAdUnit {
+  name: string
+  publisherName: string
+  pastAvgDailyAr: number
+  recentAvgDailyAr: number
+  dropPct: number
+  lastGoodDate: string
+}
+
+export interface DroppedAdUnitsResponse {
+  scope: string
+  scopeLabel: string
+  pastPeriodLabel: string
+  recentPeriodLabel: string
+  dropped: DroppedAdUnit[]
+}
+
+export interface DroppedPublisher {
+  name: string
+  pastAvgDailyAr: number
+  recentAvgDailyAr: number
+  dropPct: number
+  lastGoodDate: string
+}
+
+export interface DroppedPublishersResponse {
+  scope: string
+  scopeLabel: string
+  pastPeriodLabel: string
+  recentPeriodLabel: string
+  dropped: DroppedPublisher[]
+}
+
+export async function fetchDroppedAdUnits(scope?: string): Promise<DroppedAdUnitsResponse> {
+  const params = new URLSearchParams()
+  if (scope) params.set('scope', scope)
+  const q = params.toString()
+  const res = await fetch(`/api/dropped-ad-units${q ? `?${q}` : ''}`)
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error((body as { error?: string }).error ?? res.statusText)
+  }
+  return res.json() as Promise<DroppedAdUnitsResponse>
+}
+
+export async function fetchDroppedPublishers(scope?: string): Promise<DroppedPublishersResponse> {
+  const params = new URLSearchParams()
+  if (scope) params.set('scope', scope)
+  const q = params.toString()
+  const res = await fetch(`/api/dropped-publishers${q ? `?${q}` : ''}`)
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error((body as { error?: string }).error ?? res.statusText)
+  }
+  return res.json() as Promise<DroppedPublishersResponse>
+}
+
+export interface DailyDropAdUnit {
+  name: string
+  publisherName: string
+  previousAr: number
+  currentAr: number
+  dropPct: number
+}
+
+export interface DailyDropPublisher {
+  name: string
+  previousAr: number
+  currentAr: number
+  dropPct: number
+}
+
+export interface DailyRecoveredAdUnit {
+  name: string
+  publisherName: string
+  previousAr: number
+  currentAr: number
+  increasePct: number
+}
+
+export interface DailyRecoveredPublisher {
+  name: string
+  previousAr: number
+  currentAr: number
+  increasePct: number
+}
+
+export interface DailyDropAlertResponse {
+  comparisonLabel: string
+  isMondayComparison: boolean
+  droppedAdUnits: DailyDropAdUnit[]
+  droppedPublishers: DailyDropPublisher[]
+  recoveredAdUnits: DailyRecoveredAdUnit[]
+  recoveredPublishers: DailyRecoveredPublisher[]
+}
+
+export async function fetchDailyDropAlert(): Promise<DailyDropAlertResponse> {
+  const res = await fetch('/api/alerts/daily-drop')
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error((body as { error?: string }).error ?? res.statusText)
+  }
+  return res.json() as Promise<DailyDropAlertResponse>
+}

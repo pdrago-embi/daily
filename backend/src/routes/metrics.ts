@@ -2807,7 +2807,7 @@ router.get("/top-ten", async (req: Request, res: Response) => {
     }
     topAdUnits.push(...[...adMap.entries()]
       .map(([, v]) => ({ 
-        name: v.publisherName ? `${v.publisherName} / ${v.adUnitName}` : v.adUnitName, 
+        name: v.adUnitName, 
         publisherName: v.publisherName, 
         value: v.value 
       }))
@@ -2871,6 +2871,475 @@ router.get("/top-ten", async (req: Request, res: Response) => {
       topPublishers,
       topAdUnits,
       topNetworks: allNetworks,
+    });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : "Unknown error";
+    const status = axios.isAxiosError(e) && e.response?.status ? e.response.status : 500;
+    res.status(status).json({ error: msg });
+  }
+});
+
+router.get("/dropped-ad-units", async (req: Request, res: Response) => {
+  try {
+    const scopeRaw = String(req.query.scope ?? 'general').toLowerCase();
+    const scopeLabel = scopeRaw === 'general' ? 'General' 
+      : scopeRaw === 'sasha' ? 'Sasha Balbi' 
+      : scopeRaw === 'embi' ? 'Embi Media' 
+      : scopeRaw;
+
+    const client = createClient();
+    const end = addDays(todayLocal(), -1);
+    const startRecent = addDays(end, -7);
+    const startPast = addDays(end, -30);
+
+    const recentStr = formatDate(startRecent);
+    const pastStr = formatDate(startPast);
+    const endStr = formatDate(end);
+    const pastEndStr = formatDate(addDays(end, -8));
+
+    const recentRows = await fetchMetricsGrouped(client, recentStr, endStr, ['ad_unit', 'publisher']);
+    const pastRows = await fetchMetricsGrouped(client, pastStr, pastEndStr, ['ad_unit', 'publisher']);
+    const dailyRows = await fetchMetricsGrouped(client, pastStr, endStr, ['ad_unit', 'publisher', 'date']);
+
+    const shouldFilterPublisher = (name: string | undefined): boolean => {
+      if (scopeRaw === 'general') return false;
+      if (scopeRaw === 'sasha') return !isSashaPublisherName(name);
+      if (scopeRaw === 'embi') return !isEmbiPublisherName(name);
+      return !name?.trim().toUpperCase().startsWith(scopeRaw.toUpperCase());
+    };
+
+    interface AdUnitStats {
+      adUnitName: string;
+      publisherName: string;
+      totalAr: number;
+      daysWithAr: number;
+      lastDate: string;
+    }
+
+    const lastGoodDates = new Map<string, string>();
+    for (const r of dailyRows) {
+      const pubName = r.publisher_name?.trim();
+      if (shouldFilterPublisher(pubName)) continue;
+      const key = `${r.ad_unit_id}-${r.publisher_id ?? 0}`;
+      const ar = toNum(r.ad_requests);
+      const date = r.date ?? '';
+      if (ar > 0) {
+        const existing = lastGoodDates.get(key);
+        if (!existing || date > existing) {
+          lastGoodDates.set(key, date);
+        }
+      }
+    }
+
+    const pastAdUnits = new Map<string, AdUnitStats>();
+    for (const r of pastRows) {
+      const pubName = r.publisher_name?.trim();
+      if (shouldFilterPublisher(pubName)) continue;
+      const key = `${r.ad_unit_id}-${r.publisher_id ?? 0}`;
+      const ar = toNum(r.ad_requests);
+      const existing = pastAdUnits.get(key);
+      if (!existing) {
+        pastAdUnits.set(key, {
+          adUnitName: r.ad_unit_name?.trim() || `Ad unit ${r.ad_unit_id}`,
+          publisherName: pubName || `Publisher ${r.publisher_id}`,
+          totalAr: ar,
+          daysWithAr: ar > 0 ? 1 : 0,
+          lastDate: '',
+        });
+      } else {
+        existing.totalAr += ar;
+        if (ar > 0) existing.daysWithAr += 1;
+      }
+    }
+
+    const recentAdUnits = new Map<string, AdUnitStats>();
+    for (const r of recentRows) {
+      const pubName = r.publisher_name?.trim();
+      if (shouldFilterPublisher(pubName)) continue;
+      const key = `${r.ad_unit_id}-${r.publisher_id ?? 0}`;
+      const ar = toNum(r.ad_requests);
+      const existing = recentAdUnits.get(key);
+      if (!existing) {
+        recentAdUnits.set(key, {
+          adUnitName: r.ad_unit_name?.trim() || `Ad unit ${r.ad_unit_id}`,
+          publisherName: pubName || `Publisher ${r.publisher_id}`,
+          totalAr: ar,
+          daysWithAr: ar > 0 ? 1 : 0,
+          lastDate: '',
+        });
+      } else {
+        existing.totalAr += ar;
+        if (ar > 0) existing.daysWithAr += 1;
+      }
+    }
+
+    const dropped: { name: string; publisherName: string; pastAvgDailyAr: number; recentAvgDailyAr: number; dropPct: number; lastGoodDate: string }[] = [];
+    
+    for (const [key, past] of pastAdUnits) {
+      const pastAvg = past.daysWithAr > 0 ? past.totalAr / past.daysWithAr : 0;
+      if (pastAvg < 1000) continue;
+
+      const recent = recentAdUnits.get(key);
+      const recentAvg = recent && recent.daysWithAr > 0 ? recent.totalAr / recent.daysWithAr : 0;
+
+      if (recentAvg > 0 && recentAvg >= pastAvg * 0.05) continue;
+      
+      const dropPct = pastAvg > 0 ? ((pastAvg - recentAvg) / pastAvg) * 100 : 100;
+      if (dropPct < 50 && recentAvg > 0) continue;
+
+      const lastGoodDate = lastGoodDates.get(key) || '—';
+      
+      dropped.push({
+        name: past.adUnitName,
+        publisherName: past.publisherName,
+        pastAvgDailyAr: Math.round(pastAvg),
+        recentAvgDailyAr: Math.round(recentAvg),
+        dropPct: Math.round(dropPct),
+        lastGoodDate,
+      });
+    }
+
+    dropped.sort((a, b) => b.dropPct - a.dropPct);
+
+    res.json({
+      scope: scopeRaw,
+      scopeLabel,
+      pastPeriodLabel: `${pastStr} → ${pastEndStr}`,
+      recentPeriodLabel: `${recentStr} → ${endStr}`,
+      dropped: dropped.slice(0, 50),
+    });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : "Unknown error";
+    const status = axios.isAxiosError(e) && e.response?.status ? e.response.status : 500;
+    res.status(status).json({ error: msg });
+  }
+});
+
+router.get("/dropped-publishers", async (req: Request, res: Response) => {
+  try {
+    const scopeRaw = String(req.query.scope ?? 'general').toLowerCase();
+    const scopeLabel = scopeRaw === 'general' ? 'General' 
+      : scopeRaw === 'sasha' ? 'Sasha Balbi' 
+      : scopeRaw === 'embi' ? 'Embi Media' 
+      : scopeRaw;
+
+    const client = createClient();
+    const end = addDays(todayLocal(), -1);
+    const startRecent = addDays(end, -7);
+    const startPast = addDays(end, -30);
+
+    const recentStr = formatDate(startRecent);
+    const pastStr = formatDate(startPast);
+    const endStr = formatDate(end);
+    const pastEndStr = formatDate(addDays(end, -8));
+
+    const recentRows = await fetchMetricsGrouped(client, recentStr, endStr, ['publisher']);
+    const pastRows = await fetchMetricsGrouped(client, pastStr, pastEndStr, ['publisher']);
+    const dailyRows = await fetchMetricsGrouped(client, pastStr, endStr, ['publisher', 'date']);
+
+    const shouldFilterPublisher = (name: string | undefined): boolean => {
+      if (scopeRaw === 'general') return false;
+      if (scopeRaw === 'sasha') return !isSashaPublisherName(name);
+      if (scopeRaw === 'embi') return !isEmbiPublisherName(name);
+      return !name?.trim().toUpperCase().startsWith(scopeRaw.toUpperCase());
+    };
+
+    interface PublisherStats {
+      publisherName: string;
+      totalAr: number;
+      daysWithAr: number;
+      lastDate: string;
+    }
+
+    const lastGoodDates = new Map<string, string>();
+    for (const r of dailyRows) {
+      const pubName = r.publisher_name?.trim();
+      if (shouldFilterPublisher(pubName)) continue;
+      const key = String(r.publisher_id ?? pubName);
+      const ar = toNum(r.ad_requests);
+      const date = r.date ?? '';
+      if (ar > 0) {
+        const existing = lastGoodDates.get(key);
+        if (!existing || date > existing) {
+          lastGoodDates.set(key, date);
+        }
+      }
+    }
+
+    const pastPublishers = new Map<string, PublisherStats>();
+    for (const r of pastRows) {
+      const pubName = r.publisher_name?.trim();
+      if (shouldFilterPublisher(pubName)) continue;
+      const key = String(r.publisher_id);
+      const ar = toNum(r.ad_requests);
+      const existing = pastPublishers.get(key);
+      if (!existing) {
+        pastPublishers.set(key, {
+          publisherName: pubName || `Publisher ${r.publisher_id}`,
+          totalAr: ar,
+          daysWithAr: ar > 0 ? 1 : 0,
+          lastDate: '',
+        });
+      } else {
+        existing.totalAr += ar;
+        if (ar > 0) existing.daysWithAr += 1;
+      }
+    }
+
+    const recentPublishers = new Map<string, PublisherStats>();
+    for (const r of recentRows) {
+      const pubName = r.publisher_name?.trim();
+      if (shouldFilterPublisher(pubName)) continue;
+      const key = String(r.publisher_id);
+      const ar = toNum(r.ad_requests);
+      const existing = recentPublishers.get(key);
+      if (!existing) {
+        recentPublishers.set(key, {
+          publisherName: pubName || `Publisher ${r.publisher_id}`,
+          totalAr: ar,
+          daysWithAr: ar > 0 ? 1 : 0,
+          lastDate: '',
+        });
+      } else {
+        existing.totalAr += ar;
+        if (ar > 0) existing.daysWithAr += 1;
+      }
+    }
+
+    const dropped: { name: string; pastAvgDailyAr: number; recentAvgDailyAr: number; dropPct: number; lastGoodDate: string }[] = [];
+    
+    for (const [key, past] of pastPublishers) {
+      const pastAvg = past.daysWithAr > 0 ? past.totalAr / past.daysWithAr : 0;
+      if (pastAvg < 1000) continue;
+
+      const recent = recentPublishers.get(key);
+      const recentAvg = recent && recent.daysWithAr > 0 ? recent.totalAr / recent.daysWithAr : 0;
+
+      if (recentAvg > 0 && recentAvg >= pastAvg * 0.05) continue;
+      
+      const dropPct = pastAvg > 0 ? ((pastAvg - recentAvg) / pastAvg) * 100 : 100;
+      if (dropPct < 50 && recentAvg > 0) continue;
+
+      const lastGoodDate = lastGoodDates.get(key) || '—';
+      
+      dropped.push({
+        name: past.publisherName,
+        pastAvgDailyAr: Math.round(pastAvg),
+        recentAvgDailyAr: Math.round(recentAvg),
+        dropPct: Math.round(dropPct),
+        lastGoodDate,
+      });
+    }
+
+    dropped.sort((a, b) => b.dropPct - a.dropPct);
+
+    res.json({
+      scope: scopeRaw,
+      scopeLabel,
+      pastPeriodLabel: `${pastStr} → ${pastEndStr}`,
+      recentPeriodLabel: `${recentStr} → ${endStr}`,
+      dropped: dropped.slice(0, 50),
+    });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : "Unknown error";
+    const status = axios.isAxiosError(e) && e.response?.status ? e.response.status : 500;
+    res.status(status).json({ error: msg });
+  }
+});
+
+router.get("/alerts/daily-drop", async (req: Request, res: Response) => {
+  try {
+    const client = createClient();
+    const now = todayLocal();
+    const end = addDays(now, -1);
+    const endStr = formatDate(end);
+
+    const isMonday = now.getDay() === 1;
+
+    let currentStart: string;
+    let currentEnd: string;
+    let previousStart: string;
+    let previousEnd: string;
+    let comparisonLabel: string;
+    let isMondayComparison: boolean;
+
+    if (isMonday) {
+      const saturday = formatDate(addDays(end, -1));
+      const sunday = endStr;
+      const thursday = formatDate(addDays(end, -4));
+      const friday = formatDate(addDays(end, -3));
+      currentStart = saturday;
+      currentEnd = sunday;
+      previousStart = thursday;
+      previousEnd = friday;
+      comparisonLabel = `${shortMd(thursday)}-${shortMd(friday)} vs ${shortMd(saturday)}-${shortMd(sunday)}`;
+      isMondayComparison = true;
+    } else {
+      const dayBeforeEnd = formatDate(addDays(end, -1));
+      currentStart = endStr;
+      currentEnd = endStr;
+      previousStart = dayBeforeEnd;
+      previousEnd = dayBeforeEnd;
+      comparisonLabel = `${shortMd(dayBeforeEnd)} vs ${shortMd(endStr)}`;
+      isMondayComparison = false;
+    }
+
+    const currentRows = await fetchMetricsGrouped(client, currentStart, currentEnd, ['ad_unit', 'publisher', 'date']);
+    const previousRows = await fetchMetricsGrouped(client, previousStart, previousEnd, ['ad_unit', 'publisher', 'date']);
+
+    const previousAdUnits = new Map<string, { name: string; publisherName: string; totalAr: number; days: number }>();
+    for (const r of previousRows) {
+      const ar = toNum(r.ad_requests);
+      if (ar < 5000) continue;
+      const key = `${r.ad_unit_id}-${r.publisher_id ?? 0}`;
+      const existing = previousAdUnits.get(key);
+      if (!existing) {
+        previousAdUnits.set(key, {
+          name: r.ad_unit_name?.trim() || `Ad unit ${r.ad_unit_id}`,
+          publisherName: r.publisher_name?.trim() || `Publisher ${r.publisher_id}`,
+          totalAr: ar,
+          days: 1,
+        });
+      } else {
+        existing.totalAr += ar;
+        existing.days += 1;
+      }
+    }
+
+    const previousPublishers = new Map<string, { name: string; totalAr: number; days: number }>();
+    for (const r of previousRows) {
+      const ar = toNum(r.ad_requests);
+      if (ar < 5000) continue;
+      const key = String(r.publisher_id);
+      const existing = previousPublishers.get(key);
+      if (!existing) {
+        previousPublishers.set(key, {
+          name: r.publisher_name?.trim() || `Publisher ${r.publisher_id}`,
+          totalAr: ar,
+          days: 1,
+        });
+      } else {
+        existing.totalAr += ar;
+        existing.days += 1;
+      }
+    }
+
+    const currentAdUnits = new Map<string, { name: string; publisherName: string; totalAr: number; days: number }>();
+    for (const r of currentRows) {
+      const ar = toNum(r.ad_requests);
+      if (ar < 5000) continue;
+      const key = `${r.ad_unit_id}-${r.publisher_id ?? 0}`;
+      const existing = currentAdUnits.get(key);
+      if (!existing) {
+        currentAdUnits.set(key, {
+          name: r.ad_unit_name?.trim() || `Ad unit ${r.ad_unit_id}`,
+          publisherName: r.publisher_name?.trim() || `Publisher ${r.publisher_id}`,
+          totalAr: ar,
+          days: 1,
+        });
+      } else {
+        existing.totalAr += ar;
+        existing.days += 1;
+      }
+    }
+
+    const currentPublishers = new Map<string, { name: string; totalAr: number; days: number }>();
+    for (const r of currentRows) {
+      const ar = toNum(r.ad_requests);
+      if (ar < 5000) continue;
+      const key = String(r.publisher_id);
+      const existing = currentPublishers.get(key);
+      if (!existing) {
+        currentPublishers.set(key, {
+          name: r.publisher_name?.trim() || `Publisher ${r.publisher_id}`,
+          totalAr: ar,
+          days: 1,
+        });
+      } else {
+        existing.totalAr += ar;
+        existing.days += 1;
+      }
+    }
+
+    const droppedAdUnits: { name: string; publisherName: string; previousAr: number; currentAr: number; dropPct: number }[] = [];
+    for (const [key, prev] of previousAdUnits) {
+      const prevAvg = prev.totalAr / prev.days;
+      const curr = currentAdUnits.get(key);
+      const currAvg = curr ? curr.totalAr / curr.days : 0;
+      if (currAvg < prevAvg * 0.05) {
+        const dropPct = prevAvg > 0 ? Math.round(((prevAvg - currAvg) / prevAvg) * 100) : 100;
+        droppedAdUnits.push({
+          name: prev.name,
+          publisherName: prev.publisherName,
+          previousAr: Math.round(prevAvg),
+          currentAr: Math.round(currAvg),
+          dropPct,
+        });
+      }
+    }
+
+    const droppedPublishers: { name: string; previousAr: number; currentAr: number; dropPct: number }[] = [];
+    for (const [key, prev] of previousPublishers) {
+      const prevAvg = prev.totalAr / prev.days;
+      const curr = currentPublishers.get(key);
+      const currAvg = curr ? curr.totalAr / curr.days : 0;
+      if (currAvg < prevAvg * 0.05) {
+        const dropPct = prevAvg > 0 ? Math.round(((prevAvg - currAvg) / prevAvg) * 100) : 100;
+        droppedPublishers.push({
+          name: prev.name,
+          previousAr: Math.round(prevAvg),
+          currentAr: Math.round(currAvg),
+          dropPct,
+        });
+      }
+    }
+
+    droppedAdUnits.sort((a, b) => b.dropPct - a.dropPct);
+    droppedPublishers.sort((a, b) => b.dropPct - a.dropPct);
+
+    const recoveredAdUnits: { name: string; publisherName: string; previousAr: number; currentAr: number; increasePct: number }[] = [];
+    for (const [key, curr] of currentAdUnits) {
+      const currAvg = curr.totalAr / curr.days;
+      const prev = previousAdUnits.get(key);
+      const prevAvg = prev ? prev.totalAr / prev.days : 0;
+      if (prevAvg < 500 && currAvg >= 5000) {
+        const increasePct = prevAvg > 0 ? Math.round(((currAvg - prevAvg) / prevAvg) * 100) : 100;
+        recoveredAdUnits.push({
+          name: curr.name,
+          publisherName: curr.publisherName,
+          previousAr: Math.round(prevAvg),
+          currentAr: Math.round(currAvg),
+          increasePct,
+        });
+      }
+    }
+
+    const recoveredPublishers: { name: string; previousAr: number; currentAr: number; increasePct: number }[] = [];
+    for (const [key, curr] of currentPublishers) {
+      const currAvg = curr.totalAr / curr.days;
+      const prev = previousPublishers.get(key);
+      const prevAvg = prev ? prev.totalAr / prev.days : 0;
+      if (prevAvg < 500 && currAvg >= 5000) {
+        const increasePct = prevAvg > 0 ? Math.round(((currAvg - prevAvg) / prevAvg) * 100) : 100;
+        recoveredPublishers.push({
+          name: curr.name,
+          previousAr: Math.round(prevAvg),
+          currentAr: Math.round(currAvg),
+          increasePct,
+        });
+      }
+    }
+
+    recoveredAdUnits.sort((a, b) => b.increasePct - a.increasePct);
+    recoveredPublishers.sort((a, b) => b.increasePct - a.increasePct);
+
+    res.json({
+      comparisonLabel,
+      isMondayComparison,
+      droppedAdUnits,
+      droppedPublishers,
+      recoveredAdUnits,
+      recoveredPublishers,
     });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "Unknown error";

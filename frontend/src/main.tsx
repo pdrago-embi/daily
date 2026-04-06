@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/reac
 import { BrowserRouter, Routes, Route, useParams } from 'react-router-dom'
 import { ThemeProvider } from './hooks/useTheme'
 import { MediaBuyersProvider, useMediaBuyers } from './hooks/useMediaBuyers'
-import { usePrefetchDashboardData } from './hooks'
+import { usePrefetchDashboardData, usePrefetchTopTenData } from './hooks'
 import { getMediaBuyers } from './utils/mediaBuyers'
 import './index.css'
 import { Layout } from './components/Layout'
@@ -58,6 +58,7 @@ function CacheInvalidator() {
   useEffect(() => {
     queryClient.invalidateQueries({ queryKey: ['trend'] })
     queryClient.invalidateQueries({ queryKey: ['summary'] })
+    queryClient.invalidateQueries({ queryKey: ['top-ten'] })
     queryClient.invalidateQueries({ queryKey: ['media-buyer'] })
     queryClient.invalidateQueries({ queryKey: ['sasha-publishers'] })
     queryClient.invalidateQueries({ queryKey: ['embi-publishers'] })
@@ -68,6 +69,7 @@ function CacheInvalidator() {
 
 function PrefetchWrapper() {
   usePrefetchDashboardData('general')
+  usePrefetchTopTenData('general')
   return <DashboardRoutes />
 }
 
