@@ -337,6 +337,8 @@ export interface DailyMetric {
 }
 
 export interface DailyDropAlertResponse {
+  scope: string
+  scopeLabel: string
   comparisonLabel: string
   isMondayComparison: boolean
   dailyMetrics: DailyMetric[]
@@ -346,8 +348,9 @@ export interface DailyDropAlertResponse {
   recoveredPublishers: DailyRecoveredPublisher[]
 }
 
-export async function fetchDailyDropAlert(): Promise<DailyDropAlertResponse> {
-  const res = await fetch('/api/alerts/daily-drop')
+export async function fetchDailyDropAlert(scope?: string): Promise<DailyDropAlertResponse> {
+  const url = scope ? `/api/alerts/daily-drop?scope=${encodeURIComponent(scope)}` : '/api/alerts/daily-drop'
+  const res = await fetch(url)
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
     throw new Error((body as { error?: string }).error ?? res.statusText)

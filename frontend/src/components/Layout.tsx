@@ -18,7 +18,7 @@ export function Layout({ children }: LayoutProps) {
   const [buyerToRemove, setBuyerToRemove] = useState<string | null>(null)
   const [buyerToEdit, setBuyerToEdit] = useState<string | null>(null)
   const [showAlertModal, setShowAlertModal] = useState(!getAlertCookie())
-  const [defaultMediaBuyer, setDefaultMediaBuyer] = useState<{ id: string; name: string } | null>(null)
+  const [defaultMediaBuyer, setDefaultMediaBuyer] = useState<{ id: string; name: string; prefix: string } | null>(null)
   const location = useLocation()
   const { theme } = useTheme()
   const { buyers, add, remove, update, isLocked, setLocked } = useMediaBuyers()
@@ -34,7 +34,7 @@ export function Layout({ children }: LayoutProps) {
     if (defaultBuyerId) {
       const buyer = buyers.find(b => b.id === defaultBuyerId)
       if (buyer) {
-        setDefaultMediaBuyer({ id: buyer.id, name: buyer.name })
+        setDefaultMediaBuyer({ id: buyer.id, name: buyer.name, prefix: buyer.prefix })
       }
     }
   }, [buyers])

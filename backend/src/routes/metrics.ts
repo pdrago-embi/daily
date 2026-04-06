@@ -10,7 +10,20 @@ interface CacheEntry {
 
 const cache = new Map<string, CacheEntry>();
 
-const CACHE_TTL_MS = 5 * 60 * 1000;
+const CACHE_TTL_MS = 15 * 60 * 1000;
+
+let lastRequestTime = 0;
+const REQUEST_DELAY_MS = 200;
+
+async function rateLimitedRequest<T>(requestFn: () => Promise<T>): Promise<T> {
+  const now = Date.now();
+  const timeSinceLastRequest = now - lastRequestTime;
+  if (timeSinceLastRequest < REQUEST_DELAY_MS) {
+    await new Promise(resolve => setTimeout(resolve, REQUEST_DELAY_MS - timeSinceLastRequest));
+  }
+  lastRequestTime = Date.now();
+  return requestFn();
+}
 
 function getCached<T>(key: string): T | null {
   const entry = cache.get(key);
@@ -322,9 +335,12 @@ async function fetchAggregatedByPublisher(
   const cacheKey = createCacheKey("agg-pub", params);
   const cached = getCached<{ data: AggregatedRow[] }>(cacheKey);
   if (cached) return cached.data ?? [];
-  const { data } = await client.get<{ data: AggregatedRow[] }>(
-    `/api/metrics/aggregated?${params.toString()}`
-  );
+  const data = await rateLimitedRequest(async () => {
+    const response = await client.get<{ data: AggregatedRow[] }>(
+      `/api/metrics/aggregated?${params.toString()}`
+    );
+    return response.data;
+  });
   setCache(cacheKey, data);
   return data.data ?? [];
 }
@@ -342,9 +358,12 @@ async function fetchAggregatedByNetwork(
   const cacheKey = createCacheKey("agg-net", params);
   const cached = getCached<{ data: AggregatedRow[] }>(cacheKey);
   if (cached) return cached.data ?? [];
-  const { data } = await client.get<{ data: AggregatedRow[] }>(
-    `/api/metrics/aggregated?${params.toString()}`
-  );
+  const data = await rateLimitedRequest(async () => {
+    const response = await client.get<{ data: AggregatedRow[] }>(
+      `/api/metrics/aggregated?${params.toString()}`
+    );
+    return response.data;
+  });
   setCache(cacheKey, data);
   return data.data ?? [];
 }
@@ -362,9 +381,12 @@ async function fetchAggregatedByGamNetwork(
   const cacheKey = createCacheKey("agg-gam", params);
   const cached = getCached<{ data: AggregatedRow[] }>(cacheKey);
   if (cached) return cached.data ?? [];
-  const { data } = await client.get<{ data: AggregatedRow[] }>(
-    `/api/metrics/aggregated?${params.toString()}`
-  );
+  const data = await rateLimitedRequest(async () => {
+    const response = await client.get<{ data: AggregatedRow[] }>(
+      `/api/metrics/aggregated?${params.toString()}`
+    );
+    return response.data;
+  });
   setCache(cacheKey, data);
   return data.data ?? [];
 }
@@ -2088,6 +2110,7 @@ async function fetchMetricsGrouped(
   let page = 1;
   const limit = 100;
   let totalPages = 1;
+  const maxRetries = 3;
 
   do {
     const params = new URLSearchParams();
@@ -2105,12 +2128,32 @@ async function fetchMetricsGrouped(
       rows.push(...(cached.data ?? []));
       totalPages = cached.pagination?.totalPages ?? 1;
     } else {
-      const { data } = await client.get<MetricsListResponse>(
-        `/api/metrics?${params.toString()}`
-      );
-      setCache(cacheKey, data);
-      rows.push(...(data.data ?? []));
-      totalPages = data.pagination?.totalPages ?? 1;
+      let attempt = 0;
+      let data: MetricsListResponse | null = null;
+      
+      while (attempt < maxRetries && !data) {
+        try {
+          data = await rateLimitedRequest(async () => {
+            const response = await client.get<MetricsListResponse>(
+              `/api/metrics?${params.toString()}`
+            );
+            return response.data;
+          });
+        } catch (error) {
+          attempt++;
+          if (attempt >= maxRetries) {
+            const msg = error instanceof Error ? error.message : "Unknown error";
+            throw new Error(`Failed after ${maxRetries} retries: ${msg}`);
+          }
+          await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+        }
+      }
+      
+      if (data) {
+        setCache(cacheKey, data);
+        rows.push(...(data.data ?? []));
+        totalPages = data.pagination?.totalPages ?? 1;
+      }
     }
     page += 1;
   } while (page <= totalPages);
@@ -3198,11 +3241,23 @@ router.get("/dropped-publishers", async (req: Request, res: Response) => {
 router.get("/alerts/daily-drop", async (req: Request, res: Response) => {
   try {
     const client = createClient();
+    const scopeRaw = String(req.query.scope ?? 'general').toLowerCase();
+    const scopeLabel = scopeRaw === 'general' ? 'General'
+      : scopeRaw === 'sasha' ? 'Sasha Balbi'
+      : scopeRaw === 'embi' ? 'Embi Media'
+      : scopeRaw;
     const now = todayLocal();
     const end = addDays(now, -1);
     const endStr = formatDate(end);
 
     const isMonday = now.getDay() === 1;
+
+    const shouldFilterPublisher = (name: string | undefined): boolean => {
+      if (scopeRaw === 'general') return false;
+      if (scopeRaw === 'sasha') return !isSashaPublisherName(name);
+      if (scopeRaw === 'embi') return !isEmbiPublisherName(name);
+      return !name?.trim().toUpperCase().startsWith(scopeRaw.toUpperCase());
+    };
 
     let currentStart: string;
     let currentEnd: string;
@@ -3235,36 +3290,49 @@ router.get("/alerts/daily-drop", async (req: Request, res: Response) => {
     const currentRows = await fetchMetricsGrouped(client, currentStart, currentEnd, ['ad_unit', 'publisher', 'date']);
     const previousRows = await fetchMetricsGrouped(client, previousStart, previousEnd, ['ad_unit', 'publisher', 'date']);
 
+    const filterRows = (rows: MetricsRow[]): MetricsRow[] => {
+      return rows.filter(r => !shouldFilterPublisher(r.publisher_name?.trim()));
+    };
+
+    const filteredCurrentRows = filterRows(currentRows);
+    const filteredPreviousRows = filterRows(previousRows);
+
     const dailyMetrics: { date: string; revenue: number; cost: number; profit: number }[] = [];
     if (isMonday) {
       const fri = formatDate(addDays(end, -2));
       const sat = formatDate(addDays(end, -1));
       const sun = endStr;
-      const dateRange = isMonday ? `${previousStart}/${previousEnd}` : currentStart;
-      const [friRows, satRows, sunRows] = await Promise.all([
-        fetchMetricsGrouped(client, fri, fri, ['date']),
-        fetchMetricsGrouped(client, sat, sat, ['date']),
-        fetchMetricsGrouped(client, sun, sun, ['date']),
-      ]);
-      const sumRows = (rows: MetricsRow[]) => {
-        let rev = 0, cost = 0, imp = 0;
-        for (const r of rows) { rev += toNum(r.revenue); cost += toNum(r.cost); }
-        return { revenue: rev, cost, profit: rev - cost };
-      };
+      const metricsByDate = new Map<string, { revenue: number; cost: number }>();
+      for (const r of filteredCurrentRows) {
+        const date = r.date ?? '';
+        const existing = metricsByDate.get(date) ?? { revenue: 0, cost: 0 };
+        existing.revenue += toNum(r.revenue);
+        existing.cost += toNum(r.cost);
+        metricsByDate.set(date, existing);
+      }
+      for (const r of filteredPreviousRows) {
+        const date = r.date ?? '';
+        const existing = metricsByDate.get(date) ?? { revenue: 0, cost: 0 };
+        existing.revenue += toNum(r.revenue);
+        existing.cost += toNum(r.cost);
+        metricsByDate.set(date, existing);
+      }
       dailyMetrics.push(
-        { date: fri, ...sumRows(friRows) },
-        { date: sat, ...sumRows(satRows) },
-        { date: sun, ...sumRows(sunRows) },
+        { date: fri, ...metricsByDate.get(fri) ?? { revenue: 0, cost: 0 }, profit: 0 },
+        { date: sat, ...metricsByDate.get(sat) ?? { revenue: 0, cost: 0 }, profit: 0 },
+        { date: sun, ...metricsByDate.get(sun) ?? { revenue: 0, cost: 0 }, profit: 0 },
       );
+      for (const m of dailyMetrics) {
+        m.profit = m.revenue - m.cost;
+      }
     } else {
-      const yesterdayRows = await fetchMetricsGrouped(client, currentStart, currentEnd, ['date']);
       let revenue = 0, cost = 0;
-      for (const r of yesterdayRows) { revenue += toNum(r.revenue); cost += toNum(r.cost); }
+      for (const r of filteredCurrentRows) { revenue += toNum(r.revenue); cost += toNum(r.cost); }
       dailyMetrics.push({ date: currentStart, revenue, cost, profit: revenue - cost });
     }
 
     const previousAdUnits = new Map<string, { name: string; publisherName: string; totalAr: number; days: number }>();
-    for (const r of previousRows) {
+    for (const r of filteredPreviousRows) {
       const ar = toNum(r.ad_requests);
       if (ar < 5000) continue;
       const key = `${r.ad_unit_id}-${r.publisher_id ?? 0}`;
@@ -3283,7 +3351,7 @@ router.get("/alerts/daily-drop", async (req: Request, res: Response) => {
     }
 
     const previousPublishers = new Map<string, { name: string; totalAr: number; days: number }>();
-    for (const r of previousRows) {
+    for (const r of filteredPreviousRows) {
       const ar = toNum(r.ad_requests);
       if (ar < 5000) continue;
       const key = String(r.publisher_id);
@@ -3301,7 +3369,7 @@ router.get("/alerts/daily-drop", async (req: Request, res: Response) => {
     }
 
     const currentAdUnits = new Map<string, { name: string; publisherName: string; totalAr: number; days: number }>();
-    for (const r of currentRows) {
+    for (const r of filteredCurrentRows) {
       const ar = toNum(r.ad_requests);
       if (ar < 5000) continue;
       const key = `${r.ad_unit_id}-${r.publisher_id ?? 0}`;
@@ -3320,7 +3388,7 @@ router.get("/alerts/daily-drop", async (req: Request, res: Response) => {
     }
 
     const currentPublishers = new Map<string, { name: string; totalAr: number; days: number }>();
-    for (const r of currentRows) {
+    for (const r of filteredCurrentRows) {
       const ar = toNum(r.ad_requests);
       if (ar < 5000) continue;
       const key = String(r.publisher_id);
@@ -3410,6 +3478,8 @@ router.get("/alerts/daily-drop", async (req: Request, res: Response) => {
     recoveredPublishers.sort((a, b) => b.increasePct - a.increasePct);
 
     res.json({
+      scope: scopeRaw,
+      scopeLabel,
       comparisonLabel,
       isMondayComparison,
       dailyMetrics,

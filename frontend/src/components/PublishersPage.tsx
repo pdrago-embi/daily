@@ -164,16 +164,16 @@ export function PublishersPage({ buyer }: PublishersPageProps) {
   return (
     <div className="mx-auto max-w-6xl">
       <section className="mb-12 rounded-2xl border border-slate-800 bg-slate-900/40 p-4 shadow-xl backdrop-blur md:p-6">
-        <div className="mb-6 flex items-start justify-between gap-4">
-          <div>
-          <h2 className="text-xl font-semibold text-slate-100">
-            {buyer.name} - Resumen del mes
-          </h2>
-          <p className="text-sm text-slate-500">
-            {d.dateRange} • {!hasData ? 'Sin datos del mes actual' : `${d.daysElapsed} de ${d.daysInMonth} días`}
-          </p>
+        <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="w-full">
+            <h2 className="text-xl font-semibold text-slate-100">
+              {buyer.name} - Resumen del mes
+            </h2>
+            <p className="text-sm text-slate-500">
+              {d.dateRange} • {!hasData ? 'Sin datos del mes actual' : `${d.daysElapsed} de ${d.daysInMonth} días`}
+            </p>
           </div>
-          <label className="flex items-center gap-2 text-sm text-slate-400 cursor-pointer shrink-0">
+          <label className="flex items-center gap-2 text-sm text-slate-400 cursor-pointer shrink-0 ml-auto sm:ml-0">
             <input
               type="checkbox"
               checked={loadAsDefault}

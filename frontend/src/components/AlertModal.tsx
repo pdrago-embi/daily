@@ -5,7 +5,7 @@ import { formatNumber } from '../utils/formatters'
 
 interface AlertModalProps {
   onClose: () => void
-  defaultMediaBuyer?: { id: string; name: string } | null
+  defaultMediaBuyer?: { id: string; name: string; prefix: string } | null
 }
 
 const COOKIE_NAME = 'daily_alert_dismissed'
@@ -28,8 +28,8 @@ export function AlertModal({ onClose, defaultMediaBuyer }: AlertModalProps) {
   const [dontShowToday, setDontShowToday] = useState(false)
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['alerts', 'daily-drop'],
-    queryFn: fetchDailyDropAlert,
+    queryKey: ['alerts', 'daily-drop', defaultMediaBuyer?.id],
+    queryFn: () => fetchDailyDropAlert(defaultMediaBuyer?.id),
     staleTime: 5 * 60 * 1000,
   })
 
@@ -61,7 +61,7 @@ export function AlertModal({ onClose, defaultMediaBuyer }: AlertModalProps) {
 
   return (
       <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4">
-        <div className="rounded-xl border border-slate-700 bg-slate-900 max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+        <div className="rounded-xl border border-slate-700 bg-slate-900 max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col">
           <div className="p-4 border-b border-slate-800 flex items-center justify-between shrink-0">
             <div>
               <h2 className="text-lg font-semibold text-amber-400">{modalTitle}</h2>
