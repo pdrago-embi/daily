@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useDashboardData, useMediaBuyers } from './hooks'
 import { TrendChart } from './components/TrendChart'
 import { KpiSummaryCards } from './components/KpiSummaryCards'
@@ -6,6 +6,7 @@ import { TopTenByRevenue } from './components/TopTenByRevenue'
 import { DroppedAdUnits } from './components/DroppedAdUnits'
 import { ErrorBox, SkeletonChart, SkeletonCards, ToggleGroup } from './ui'
 import type { SummaryScope } from './types'
+import { getDefaultMediaBuyer } from './utils/mediaBuyerCookie'
 
 function DashboardSkeleton({ scope }: { scope: string }) {
   return (
@@ -28,6 +29,16 @@ function DashboardSkeleton({ scope }: { scope: string }) {
 export default function App() {
   const [chartTab, setChartTab] = useState<string>('general')
   const { buyers } = useMediaBuyers()
+
+  useEffect(() => {
+    const defaultBuyerId = getDefaultMediaBuyer()
+    if (defaultBuyerId) {
+      const buyerExists = buyers.some(b => b.id === defaultBuyerId)
+      if (buyerExists) {
+        setChartTab(defaultBuyerId)
+      }
+    }
+  }, [buyers])
 
   const { isPending, isError, error, data } = useDashboardData(
     chartTab as SummaryScope,

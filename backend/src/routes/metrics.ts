@@ -3,6 +3,33 @@ import axios, { type AxiosInstance } from "axios";
 
 const router = Router();
 
+interface CacheEntry {
+  data: unknown;
+  expiry: number;
+}
+
+const cache = new Map<string, CacheEntry>();
+
+const CACHE_TTL_MS = 5 * 60 * 1000;
+
+function getCached<T>(key: string): T | null {
+  const entry = cache.get(key);
+  if (!entry) return null;
+  if (Date.now() > entry.expiry) {
+    cache.delete(key);
+    return null;
+  }
+  return entry.data as T;
+}
+
+function setCache(key: string, data: unknown): void {
+  cache.set(key, { data, expiry: Date.now() + CACHE_TTL_MS });
+}
+
+function createCacheKey(prefix: string, params: URLSearchParams): string {
+  return `${prefix}:${params.toString()}`;
+}
+
 function createClient(): AxiosInstance {
   const baseURL = process.env.API_BASE_URL?.replace(/\/$/, "");
   const token = process.env.API_TOKEN;
@@ -292,9 +319,13 @@ async function fetchAggregatedByPublisher(
   params.set("groupBy", "publisher");
   params.set("startDate", startDate);
   params.set("endDate", endDate);
+  const cacheKey = createCacheKey("agg-pub", params);
+  const cached = getCached<{ data: AggregatedRow[] }>(cacheKey);
+  if (cached) return cached.data ?? [];
   const { data } = await client.get<{ data: AggregatedRow[] }>(
     `/api/metrics/aggregated?${params.toString()}`
   );
+  setCache(cacheKey, data);
   return data.data ?? [];
 }
 
@@ -308,9 +339,13 @@ async function fetchAggregatedByNetwork(
   params.set("groupBy", "network");
   params.set("startDate", startDate);
   params.set("endDate", endDate);
+  const cacheKey = createCacheKey("agg-net", params);
+  const cached = getCached<{ data: AggregatedRow[] }>(cacheKey);
+  if (cached) return cached.data ?? [];
   const { data } = await client.get<{ data: AggregatedRow[] }>(
     `/api/metrics/aggregated?${params.toString()}`
   );
+  setCache(cacheKey, data);
   return data.data ?? [];
 }
 
@@ -324,9 +359,13 @@ async function fetchAggregatedByGamNetwork(
   params.set("groupBy", "gam_network");
   params.set("startDate", startDate);
   params.set("endDate", endDate);
+  const cacheKey = createCacheKey("agg-gam", params);
+  const cached = getCached<{ data: AggregatedRow[] }>(cacheKey);
+  if (cached) return cached.data ?? [];
   const { data } = await client.get<{ data: AggregatedRow[] }>(
     `/api/metrics/aggregated?${params.toString()}`
   );
+  setCache(cacheKey, data);
   return data.data ?? [];
 }
 
@@ -2059,11 +2098,20 @@ async function fetchMetricsGrouped(
     params.set("page", String(page));
     params.set("limit", String(limit));
 
-    const { data } = await client.get<MetricsListResponse>(
-      `/api/metrics?${params.toString()}`
-    );
-    rows.push(...(data.data ?? []));
-    totalPages = data.pagination?.totalPages ?? 1;
+    const cacheKey = createCacheKey("metrics", params);
+    const cached = getCached<MetricsListResponse>(cacheKey);
+
+    if (cached) {
+      rows.push(...(cached.data ?? []));
+      totalPages = cached.pagination?.totalPages ?? 1;
+    } else {
+      const { data } = await client.get<MetricsListResponse>(
+        `/api/metrics?${params.toString()}`
+      );
+      setCache(cacheKey, data);
+      rows.push(...(data.data ?? []));
+      totalPages = data.pagination?.totalPages ?? 1;
+    }
     page += 1;
   } while (page <= totalPages);
 
@@ -3187,6 +3235,34 @@ router.get("/alerts/daily-drop", async (req: Request, res: Response) => {
     const currentRows = await fetchMetricsGrouped(client, currentStart, currentEnd, ['ad_unit', 'publisher', 'date']);
     const previousRows = await fetchMetricsGrouped(client, previousStart, previousEnd, ['ad_unit', 'publisher', 'date']);
 
+    const dailyMetrics: { date: string; revenue: number; cost: number; profit: number }[] = [];
+    if (isMonday) {
+      const fri = formatDate(addDays(end, -2));
+      const sat = formatDate(addDays(end, -1));
+      const sun = endStr;
+      const dateRange = isMonday ? `${previousStart}/${previousEnd}` : currentStart;
+      const [friRows, satRows, sunRows] = await Promise.all([
+        fetchMetricsGrouped(client, fri, fri, ['date']),
+        fetchMetricsGrouped(client, sat, sat, ['date']),
+        fetchMetricsGrouped(client, sun, sun, ['date']),
+      ]);
+      const sumRows = (rows: MetricsRow[]) => {
+        let rev = 0, cost = 0, imp = 0;
+        for (const r of rows) { rev += toNum(r.revenue); cost += toNum(r.cost); }
+        return { revenue: rev, cost, profit: rev - cost };
+      };
+      dailyMetrics.push(
+        { date: fri, ...sumRows(friRows) },
+        { date: sat, ...sumRows(satRows) },
+        { date: sun, ...sumRows(sunRows) },
+      );
+    } else {
+      const yesterdayRows = await fetchMetricsGrouped(client, currentStart, currentEnd, ['date']);
+      let revenue = 0, cost = 0;
+      for (const r of yesterdayRows) { revenue += toNum(r.revenue); cost += toNum(r.cost); }
+      dailyMetrics.push({ date: currentStart, revenue, cost, profit: revenue - cost });
+    }
+
     const previousAdUnits = new Map<string, { name: string; publisherName: string; totalAr: number; days: number }>();
     for (const r of previousRows) {
       const ar = toNum(r.ad_requests);
@@ -3336,6 +3412,7 @@ router.get("/alerts/daily-drop", async (req: Request, res: Response) => {
     res.json({
       comparisonLabel,
       isMondayComparison,
+      dailyMetrics,
       droppedAdUnits,
       droppedPublishers,
       recoveredAdUnits,

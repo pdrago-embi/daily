@@ -5,6 +5,7 @@ import { formatNumber } from '../utils/formatters'
 
 interface AlertModalProps {
   onClose: () => void
+  defaultMediaBuyer?: { id: string; name: string } | null
 }
 
 const COOKIE_NAME = 'daily_alert_dismissed'
@@ -23,7 +24,7 @@ export function setAlertCookie() {
   document.cookie = `${COOKIE_NAME}=1; expires=${tomorrow.toUTCString()}; path=/`
 }
 
-export function AlertModal({ onClose }: AlertModalProps) {
+export function AlertModal({ onClose, defaultMediaBuyer }: AlertModalProps) {
   const [dontShowToday, setDontShowToday] = useState(false)
 
   const { data, isLoading, isError } = useQuery({
@@ -36,8 +37,8 @@ export function AlertModal({ onClose }: AlertModalProps) {
 
   if (isLoading) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
-        <div className="rounded-xl border border-slate-700 bg-slate-900 p-6 max-w-md w-full mx-4">
+      <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4">
+        <div className="rounded-xl border border-slate-700 bg-slate-900 p-6 max-w-md w-full">
           <p className="text-slate-400 text-center">Cargando alertas...</p>
         </div>
       </div>
@@ -55,30 +56,62 @@ export function AlertModal({ onClose }: AlertModalProps) {
     onClose()
   }
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-      <div className="rounded-xl border border-slate-700 bg-slate-900 max-w-2xl w-full max-h-[85vh] overflow-hidden flex flex-col">
-        <div className="p-4 border-b border-slate-800 flex items-center justify-between shrink-0">
-          <div>
-            <h2 className="text-lg font-semibold text-amber-400">Cambios diarios</h2>
-            <p className="text-sm text-slate-500">
-              Comparación: {data.comparisonLabel}
-            </p>
-            {data.isMondayComparison && (
-              <p className="text-xs text-cyan-400 mt-1">
-                Como es lunes, se compara el promedio del sábado y domingo con el del jueves y viernes para evitar perder datos.
-              </p>
-            )}
-          </div>
-          <button
-            onClick={handleClose}
-            className="text-slate-500 hover:text-slate-300 transition-colors text-2xl leading-none"
-          >
-            ×
-          </button>
-        </div>
+  const firstName = defaultMediaBuyer?.name.split(' ')[0]
+  const modalTitle = firstName ? `Hola ${firstName}, este es tu resumen del día:` : 'Cambios diarios'
 
-        <div className="overflow-y-auto p-4 space-y-6">
+  return (
+      <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4">
+        <div className="rounded-xl border border-slate-700 bg-slate-900 max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+          <div className="p-4 border-b border-slate-800 flex items-center justify-between shrink-0">
+            <div>
+              <h2 className="text-lg font-semibold text-amber-400">{modalTitle}</h2>
+              {!firstName && (
+                <p className="text-sm text-slate-500">
+                  Comparación: {data.comparisonLabel}
+                </p>
+              )}
+              {data.isMondayComparison && (
+                <p className="text-xs text-cyan-400 mt-1">
+                  Como es lunes, se compara el promedio del sábado y domingo con el del jueves y viernes para evitar perder datos.
+                </p>
+            )}
+            </div>
+            <button
+              onClick={handleClose}
+              className="text-slate-500 hover:text-slate-300 transition-colors text-2xl leading-none shrink-0 ml-4"
+            >
+              ×
+            </button>
+          </div>
+
+          <div className="overflow-y-auto flex-1">
+            <div className="p-4 border-b border-slate-800 bg-slate-800/30">
+              <span className="text-sm font-medium text-slate-400">{data.isMondayComparison ? 'Resumen del fin de semana' : 'Resumen de ayer'}</span>
+              <div className="overflow-x-auto mt-2">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-slate-500 border-b border-slate-700">
+                      <th className="text-left py-1 pr-4">Fecha</th>
+                      <th className="text-right py-1 px-2">Revenue</th>
+                      <th className="text-right py-1 px-2">Cost</th>
+                      <th className="text-right py-1 pl-2">Profit</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.dailyMetrics.map((metric) => (
+                      <tr key={metric.date} className="border-b border-slate-800/50">
+                        <td className="py-1.5 pr-4 text-slate-400">{metric.date}</td>
+                        <td className="text-right py-1.5 px-2 text-emerald-400 font-medium">${formatNumber(metric.revenue)}</td>
+                        <td className="text-right py-1.5 px-2 text-red-400 font-medium">${formatNumber(metric.cost)}</td>
+                        <td className="text-right py-1.5 pl-2 text-violet-300 font-medium">${formatNumber(metric.profit)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="p-4 space-y-6">
           {(data.droppedPublishers.length > 0 || data.droppedAdUnits.length > 0) && (
             <div>
               <h3 className="text-base font-medium text-red-400 mb-3 flex items-center gap-2">
@@ -192,6 +225,7 @@ export function AlertModal({ onClose }: AlertModalProps) {
               )}
             </div>
           )}
+          </div>
         </div>
 
         <div className="p-4 border-t border-slate-800 shrink-0 space-y-3">

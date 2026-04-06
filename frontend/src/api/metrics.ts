@@ -329,9 +329,17 @@ export interface DailyRecoveredPublisher {
   increasePct: number
 }
 
+export interface DailyMetric {
+  date: string
+  revenue: number
+  cost: number
+  profit: number
+}
+
 export interface DailyDropAlertResponse {
   comparisonLabel: string
   isMondayComparison: boolean
+  dailyMetrics: DailyMetric[]
   droppedAdUnits: DailyDropAdUnit[]
   droppedPublishers: DailyDropPublisher[]
   recoveredAdUnits: DailyRecoveredAdUnit[]

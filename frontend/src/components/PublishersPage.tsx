@@ -1,8 +1,9 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { ErrorBox, Skeleton, SkeletonTable, SortHeader } from '../ui'
 import { formatCurrency, formatNumber } from '../utils/formatters'
 import type { MediaBuyer } from '../utils/mediaBuyers'
 import { useMediaBuyerQuery } from '../hooks'
+import { getDefaultMediaBuyer, setDefaultMediaBuyer, clearDefaultMediaBuyer } from '../utils/mediaBuyerCookie'
 
 type SortKey = 'publisher_name' | 'adRequests' | 'impressions' | 'revenue' | 'cost' | 'profit' | 'date'
 type SortDirection = 'asc' | 'desc'
@@ -17,6 +18,21 @@ export function PublishersPage({ buyer }: PublishersPageProps) {
   const [sortKey, setSortKey] = useState<SortKey>('revenue')
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
   const [activeTab, setActiveTab] = useState<TabType>('publisher')
+  const [loadAsDefault, setLoadAsDefault] = useState(false)
+
+  useEffect(() => {
+    const defaultBuyer = getDefaultMediaBuyer()
+    setLoadAsDefault(defaultBuyer === buyer.id)
+  }, [buyer.id])
+
+  const handleDefaultChange = (checked: boolean) => {
+    setLoadAsDefault(checked)
+    if (checked) {
+      setDefaultMediaBuyer(buyer.id)
+    } else {
+      clearDefaultMediaBuyer()
+    }
+  }
 
   const handleSort = (column: string) => {
     const key = column as SortKey
@@ -148,13 +164,24 @@ export function PublishersPage({ buyer }: PublishersPageProps) {
   return (
     <div className="mx-auto max-w-6xl">
       <section className="mb-12 rounded-2xl border border-slate-800 bg-slate-900/40 p-4 shadow-xl backdrop-blur md:p-6">
-        <div className="mb-6">
+        <div className="mb-6 flex items-start justify-between gap-4">
+          <div>
           <h2 className="text-xl font-semibold text-slate-100">
             {buyer.name} - Resumen del mes
           </h2>
           <p className="text-sm text-slate-500">
             {d.dateRange} • {!hasData ? 'Sin datos del mes actual' : `${d.daysElapsed} de ${d.daysInMonth} días`}
           </p>
+          </div>
+          <label className="flex items-center gap-2 text-sm text-slate-400 cursor-pointer shrink-0">
+            <input
+              type="checkbox"
+              checked={loadAsDefault}
+              onChange={(e) => handleDefaultChange(e.target.checked)}
+              className="rounded border-slate-600 bg-slate-800 text-cyan-500 focus:ring-cyan-500"
+            />
+            <span>Cargar como predeterminado</span>
+          </label>
         </div>
 
         <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/60 shadow-inner">

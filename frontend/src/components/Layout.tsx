@@ -5,6 +5,7 @@ import { useMediaBuyers } from '../hooks/useMediaBuyers'
 import { ThemeToggle } from '../ui'
 import { AddMediaBuyerModal, RemoveMediaBuyerModal, EditMediaBuyerModal } from './MediaBuyerModals'
 import { AlertModal, getAlertCookie } from './AlertModal'
+import { getDefaultMediaBuyer } from '../utils/mediaBuyerCookie'
 
 interface LayoutProps {
   children: ReactNode
@@ -17,6 +18,7 @@ export function Layout({ children }: LayoutProps) {
   const [buyerToRemove, setBuyerToRemove] = useState<string | null>(null)
   const [buyerToEdit, setBuyerToEdit] = useState<string | null>(null)
   const [showAlertModal, setShowAlertModal] = useState(!getAlertCookie())
+  const [defaultMediaBuyer, setDefaultMediaBuyer] = useState<{ id: string; name: string } | null>(null)
   const location = useLocation()
   const { theme } = useTheme()
   const { buyers, add, remove, update, isLocked, setLocked } = useMediaBuyers()
@@ -26,6 +28,16 @@ export function Layout({ children }: LayoutProps) {
   useEffect(() => {
     setMobileMenuOpen(false)
   }, [location.pathname])
+
+  useEffect(() => {
+    const defaultBuyerId = getDefaultMediaBuyer()
+    if (defaultBuyerId) {
+      const buyer = buyers.find(b => b.id === defaultBuyerId)
+      if (buyer) {
+        setDefaultMediaBuyer({ id: buyer.id, name: buyer.name })
+      }
+    }
+  }, [buyers])
 
   const asideWidthMd = sidebarCollapsed ? 'md:w-16' : 'md:w-56'
   const asideTransformMobile = mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
@@ -44,7 +56,7 @@ export function Layout({ children }: LayoutProps) {
   return (
     <>
       {showAlertModal && (
-        <AlertModal onClose={() => setShowAlertModal(false)} />
+        <AlertModal onClose={() => setShowAlertModal(false)} defaultMediaBuyer={defaultMediaBuyer} />
       )}
       <AddMediaBuyerModal
         isOpen={showAddModal}
