@@ -224,6 +224,18 @@ type VariationsEntityTab = 'publishers' | 'networks'
 
 type Metric = 'revenue' | 'impressions' | 'ad_requests'
 
+type VariationDirection = 'all' | 'positive' | 'negative'
+
+function filterByDirection(rows: VariationRow[], direction: VariationDirection): VariationRow[] {
+  if (direction === 'all') {
+    const sorted = [...rows].sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
+    return sorted.slice(0, 10)
+  }
+  const filtered = rows.filter(r => direction === 'positive' ? r.delta > 0 : r.delta < 0)
+  const sorted = [...filtered].sort((a, b) => direction === 'positive' ? b.delta - a.delta : a.delta - b.delta)
+  return sorted.slice(0, 10)
+}
+
 interface VariationsTableProps {
   metric?: Metric
 }
@@ -232,6 +244,7 @@ export function VariationsTable({ metric = 'revenue' }: VariationsTableProps) {
   const [period, setPeriod] = useState<VariationPeriod>('day')
   const [aggregate, setAggregate] = useState<VariationAggregate>('total')
   const [entityTab, setEntityTab] = useState<VariationsEntityTab>('publishers')
+  const [direction, setDirection] = useState<VariationDirection>('all')
 
   const query = useVariationsQuery({ period, aggregate, metric })
 
@@ -269,6 +282,17 @@ export function VariationsTable({ metric = 'revenue' }: VariationsTableProps) {
           label="Publishers o networks"
           variant="default"
         />
+        <ToggleGroup
+          options={[
+            { value: 'all', label: 'Todos' },
+            { value: 'positive', label: '↑ Positivas' },
+            { value: 'negative', label: '↓ Negativas' },
+          ]}
+          value={direction}
+          onChange={(v) => setDirection(v as VariationDirection)}
+          label="Tipo de variación"
+          variant="default"
+        />
       </div>
 
       {query.isPending && <Loading message="Cargando tablas..." />}
@@ -297,14 +321,14 @@ export function VariationsTable({ metric = 'revenue' }: VariationsTableProps) {
             <>
               <Section
                 title="Publishers"
-                rows={query.data.publishers}
+                rows={filterByDirection(query.data.publishers, direction)}
                 periodCurrentLabel={query.data.periodCurrentLabel}
                 periodPreviousLabel={query.data.periodPreviousLabel}
                 metric={metric}
               />
               <Section
                 title="Ad units"
-                rows={query.data.adUnits}
+                rows={filterByDirection(query.data.adUnits, direction)}
                 showPublisher
                 periodCurrentLabel={query.data.periodCurrentLabel}
                 periodPreviousLabel={query.data.periodPreviousLabel}
@@ -316,14 +340,14 @@ export function VariationsTable({ metric = 'revenue' }: VariationsTableProps) {
             <>
               <Section
                 title="Networks"
-                rows={query.data.networks}
+                rows={filterByDirection(query.data.networks, direction)}
                 periodCurrentLabel={query.data.periodCurrentLabel}
                 periodPreviousLabel={query.data.periodPreviousLabel}
                 metric={metric}
               />
               <Section
                 title="Networks por publisher"
-                rows={query.data.networksByPublisher}
+                rows={filterByDirection(query.data.networksByPublisher, direction)}
                 showPublisher
                 periodCurrentLabel={query.data.periodCurrentLabel}
                 periodPreviousLabel={query.data.periodPreviousLabel}

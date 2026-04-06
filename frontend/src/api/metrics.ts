@@ -203,3 +203,41 @@ export async function fetchVariations(params?: {
   }
   return res.json() as Promise<VariationsResponse>
 }
+
+export type TopTenPeriod = 'yesterday' | '7days' | '30days'
+export type TopTenMetric = 'revenue' | 'impressions' | 'ad_requests'
+
+export interface TopTenItem {
+  name: string
+  value: number
+}
+
+export interface TopTenAdUnitItem extends TopTenItem {
+  publisherName?: string
+}
+
+export interface TopTenResponse {
+  scope: string
+  scopeLabel: string
+  period: TopTenPeriod
+  metric: TopTenMetric
+  periodLabel: string
+  dateRange: string
+  topPublishers: TopTenItem[]
+  topAdUnits: TopTenAdUnitItem[]
+  topNetworks: TopTenItem[]
+}
+
+export async function fetchTopTen(period?: TopTenPeriod, metric?: TopTenMetric, scope?: string): Promise<TopTenResponse> {
+  const params = new URLSearchParams()
+  if (period) params.set('period', period)
+  if (metric) params.set('metric', metric)
+  if (scope) params.set('scope', scope)
+  const q = params.toString()
+  const res = await fetch(`/api/top-ten${q ? `?${q}` : ''}`)
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error((body as { error?: string }).error ?? res.statusText)
+  }
+  return res.json() as Promise<TopTenResponse>
+}

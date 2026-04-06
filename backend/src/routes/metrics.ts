@@ -2712,4 +2712,171 @@ router.get("/media-buyer/:prefix", async (req: Request, res: Response) => {
   }
 });
 
+type TopTenPeriod = 'yesterday' | '7days' | '30days';
+type TopTenMetric = 'revenue' | 'impressions' | 'ad_requests';
+
+router.get("/top-ten", async (req: Request, res: Response) => {
+  try {
+    const periodRaw = String(req.query.period ?? '7days').toLowerCase();
+    const validPeriods: TopTenPeriod[] = ['yesterday', '7days', '30days'];
+    if (!validPeriods.includes(periodRaw as TopTenPeriod)) {
+      res.status(400).json({ error: "Invalid period (use yesterday, 7days, or 30days)" });
+      return;
+    }
+    const period = periodRaw as TopTenPeriod;
+
+    const metricRaw = String(req.query.metric ?? 'revenue').toLowerCase();
+    const validMetrics: TopTenMetric[] = ['revenue', 'impressions', 'ad_requests'];
+    if (!validMetrics.includes(metricRaw as TopTenMetric)) {
+      res.status(400).json({ error: "Invalid metric (use revenue, impressions, or ad_requests)" });
+      return;
+    }
+    const metric = metricRaw as TopTenMetric;
+
+    const scopeRaw = String(req.query.scope ?? 'general').toLowerCase();
+    const scopeLabel = scopeRaw === 'general' ? 'General' 
+      : scopeRaw === 'sasha' ? 'Sasha Balbi' 
+      : scopeRaw === 'embi' ? 'Embi Media' 
+      : scopeRaw;
+
+    const client = createClient();
+    const end = addDays(todayLocal(), -1);
+    let start: Date;
+    let periodLabel: string;
+
+    if (period === 'yesterday') {
+      start = end;
+      periodLabel = 'Ayer';
+    } else if (period === '7days') {
+      start = addDays(end, -6);
+      periodLabel = 'Últimos 7 días';
+    } else {
+      start = addDays(end, -29);
+      periodLabel = 'Últimos 30 días';
+    }
+
+    const startStr = formatDate(start);
+    const endStr = formatDate(end);
+
+    const [pubRows, adRows, netRows, gamRows, netPubRows, gamPubRows] = await Promise.all([
+      fetchMetricsGrouped(client, startStr, endStr, ['publisher']),
+      fetchMetricsGrouped(client, startStr, endStr, ['ad_unit', 'publisher']),
+      fetchMetricsGrouped(client, startStr, endStr, ['network']),
+      fetchMetricsGrouped(client, startStr, endStr, ['gam_network']),
+      fetchMetricsGrouped(client, startStr, endStr, ['network', 'publisher']),
+      fetchMetricsGrouped(client, startStr, endStr, ['gam_network', 'publisher']),
+    ]);
+
+    const getValue = (r: MetricsRow): number => {
+      if (metric === 'impressions') return toNum(r.impressions);
+      if (metric === 'ad_requests') return toNum(r.ad_requests);
+      return toNum(r.revenue);
+    };
+
+    const shouldFilterPublisher = (name: string | undefined): boolean => {
+      if (scopeRaw === 'general') return false;
+      if (scopeRaw === 'sasha') return !isSashaPublisherName(name);
+      if (scopeRaw === 'embi') return !isEmbiPublisherName(name);
+      return !name?.trim().toUpperCase().startsWith(scopeRaw.toUpperCase());
+    };
+
+    const topPublishers: { name: string; value: number }[] = [];
+    const pubMap = new Map<string, number>();
+    for (const r of pubRows) {
+      const name = r.publisher_name?.trim() || `Publisher ${r.publisher_id}`;
+      if (shouldFilterPublisher(name)) continue;
+      pubMap.set(name, (pubMap.get(name) ?? 0) + getValue(r));
+    }
+    topPublishers.push(...[...pubMap.entries()]
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 10));
+
+    const topAdUnits: { name: string; publisherName: string | undefined; value: number }[] = [];
+    const adMap = new Map<string, { adUnitName: string; publisherName: string | undefined; value: number }>();
+    for (const r of adRows) {
+      const name = r.publisher_name?.trim() || `Publisher ${r.publisher_id}`;
+      if (shouldFilterPublisher(name)) continue;
+      const key = `${r.ad_unit_id}-${r.publisher_id ?? 0}`;
+      const adUnitName = r.ad_unit_name?.trim() || `Ad unit ${r.ad_unit_id}`;
+      const publisherName = r.publisher_name?.trim();
+      const entry = adMap.get(key) || { adUnitName, publisherName, value: 0 };
+      entry.value += getValue(r);
+      entry.publisherName = publisherName;
+      adMap.set(key, entry);
+    }
+    topAdUnits.push(...[...adMap.entries()]
+      .map(([, v]) => ({ 
+        name: v.publisherName ? `${v.publisherName} / ${v.adUnitName}` : v.adUnitName, 
+        publisherName: v.publisherName, 
+        value: v.value 
+      }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 10));
+
+    const netMap = new Map<string, number>();
+    if (scopeRaw === 'general') {
+      for (const r of netRows) {
+        const name = r.network_name?.trim();
+        if (!name || isGamNetworkName(name)) continue;
+        netMap.set(name, (netMap.get(name) ?? 0) + getValue(r));
+      }
+    } else {
+      for (const r of netPubRows) {
+        const pubName = r.publisher_name?.trim();
+        if (shouldFilterPublisher(pubName)) continue;
+        const name = r.network_name?.trim();
+        if (!name || isGamNetworkName(name)) continue;
+        netMap.set(name, (netMap.get(name) ?? 0) + getValue(r));
+      }
+    }
+    const topNetworks: { name: string; value: number }[] = [...netMap.entries()]
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 10);
+
+    const gamMap = new Map<string, number>();
+    if (scopeRaw === 'general') {
+      for (const r of gamRows) {
+        const name = r.gam_network_name?.trim();
+        if (!name) continue;
+        gamMap.set(name, (gamMap.get(name) ?? 0) + getValue(r));
+      }
+    } else {
+      for (const r of gamPubRows) {
+        const pubName = r.publisher_name?.trim();
+        if (shouldFilterPublisher(pubName)) continue;
+        const name = r.gam_network_name?.trim();
+        if (!name) continue;
+        gamMap.set(name, (gamMap.get(name) ?? 0) + getValue(r));
+      }
+    }
+
+    const topGamNetworks: { name: string; value: number }[] = [...gamMap.entries()]
+      .map(([name, value]) => ({ name: `GAM · ${name}`, value }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 10);
+
+    const allNetworks = [...topNetworks, ...topGamNetworks]
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 10);
+
+    res.json({
+      scope: scopeRaw,
+      scopeLabel,
+      period,
+      metric,
+      periodLabel,
+      dateRange: `${startStr} → ${endStr}`,
+      topPublishers,
+      topAdUnits,
+      topNetworks: allNetworks,
+    });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : "Unknown error";
+    const status = axios.isAxiosError(e) && e.response?.status ? e.response.status : 500;
+    res.status(status).json({ error: msg });
+  }
+});
+
 export default router;

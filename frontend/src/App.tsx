@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useDashboardData, useMediaBuyers } from './hooks'
 import { TrendChart } from './components/TrendChart'
 import { KpiSummaryCards } from './components/KpiSummaryCards'
+import { TopTenByRevenue } from './components/TopTenByRevenue'
 import { ErrorBox, Loading, ToggleGroup } from './ui'
 import type { SummaryScope } from './types'
 
@@ -64,6 +65,8 @@ export default function App() {
           </p>
         )}
       </section>
+
+      <TopTenByRevenue scope={chartTab} />
     </div>
   )
 }
