@@ -497,7 +497,7 @@ router.get("/summary", async (req: Request, res: Response) => {
 
 router.get("/summary/by-prefix/:prefix", async (req: Request, res: Response) => {
   try {
-    const prefix = (req.params.prefix ?? "").toUpperCase().trim();
+    const prefix = (String(req.params.prefix ?? "")).toUpperCase().trim();
     if (!prefix || prefix.length < 2) {
       res.status(400).json({ error: "Prefix is required (min 2 chars)" });
       return;
@@ -511,7 +511,7 @@ router.get("/summary/by-prefix/:prefix", async (req: Request, res: Response) => 
       ? fetchMetricsGrouped(client, w.currentMonthStart, w.currentMonthEnd, ["publisher"])
       : Promise.resolve([]);
 
-    const [prevRows, curRows] = await Promise.all([prevPromise, curRows]);
+    const [prevRows, curRows] = await Promise.all([prevPromise, curPromise]);
 
     type PubSnap = {
       publisher_id: number;
@@ -763,7 +763,7 @@ router.get("/trend/embi", async (_req: Request, res: Response) => {
 
 router.get("/trend/by-prefix/:prefix", async (req: Request, res: Response) => {
   try {
-    const prefix = (req.params.prefix ?? "").toUpperCase().trim();
+    const prefix = (String(req.params.prefix ?? "")).toUpperCase().trim();
     if (!prefix || prefix.length < 2) {
       res.status(400).json({ error: "Prefix is required (min 2 chars)" });
       return;
@@ -2497,7 +2497,7 @@ router.get("/embi-publishers", async (_req: Request, res: Response) => {
 
 router.get("/media-buyer/:prefix", async (req: Request, res: Response) => {
   try {
-    const prefix = (req.params.prefix ?? "").toUpperCase().trim();
+    const prefix = (String(req.params.prefix ?? "")).toUpperCase().trim();
     if (!prefix || prefix.length < 2) {
       res.status(400).json({ error: "Prefix is required (min 2 chars)" });
       return;
