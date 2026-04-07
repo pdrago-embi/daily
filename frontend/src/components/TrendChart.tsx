@@ -13,18 +13,11 @@ import {
 import type { TrendPoint } from '../types'
 import { formatCurrencyCompact } from '../utils/formatters'
 import { ChartToggle } from '../ui'
+import { getTodayDate } from '../api/metrics'
 
 function formatAxisDate(iso: string) {
   const [, m, d] = iso.split('-')
   return `${m}/${d}`
-}
-
-function getTodayDateString(): string {
-  const now = new Date()
-  const y = now.getFullYear()
-  const m = String(now.getMonth() + 1).padStart(2, '0')
-  const d = String(now.getDate()).padStart(2, '0')
-  return `${y}-${m}-${d}`
 }
 
 const CHART_LINES = [
@@ -52,7 +45,7 @@ export function TrendChart({ data }: { data: TrendPoint[] }) {
     : { top: 8, right: 16, left: 8, bottom: 8 }
   const yAxisWidth = compactChart ? 52 : 72
 
-  const today = getTodayDateString()
+  const today = getTodayDate()
   const filteredData = data.filter(p => p.date !== today)
 
   const chartData = useMemo(() => {

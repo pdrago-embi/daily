@@ -60,13 +60,37 @@ function createClient(): AxiosInstance {
 }
 
 function formatDate(d: Date): string {
-  return d.toISOString().slice(0, 10);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 function addDays(d: Date, n: number): Date {
   const x = new Date(d);
-  x.setUTCDate(x.getUTCDate() + n);
+  x.setDate(x.getDate() + n);
   return x;
+}
+
+function parseTodayParam(today: string | undefined): Date | null {
+  if (!today) return null;
+  const parsed = new Date(today + 'T00:00:00');
+  if (isNaN(parsed.getTime())) return null;
+  return parsed;
+}
+
+function todayLocal(today?: string | undefined): Date {
+  const browserDate = parseTodayParam(today);
+  return browserDate || new Date();
+}
+
+function todayLocalWithFallback(today: string | undefined): Date {
+  const browserDate = parseTodayParam(today);
+  return browserDate || new Date();
+}
+
+function getToday(today?: string | undefined): Date {
+  return parseTodayParam(today) || new Date();
 }
 
 /** YYYY-MM-DD in UTC */
@@ -106,7 +130,7 @@ function capitalizeEs(s: string): string {
 }
 
 /** Previous calendar month + current month (up to yesterday), local time. */
-function summaryMonthWindows(): {
+function summaryMonthWindows(today?: string): {
   prevMonthStart: string;
   prevMonthEnd: string;
   currentMonthStart: string;
@@ -115,7 +139,7 @@ function summaryMonthWindows(): {
   daysInMonth: number;
   hasCurrentMonthData: boolean;
 } {
-  const now = new Date();
+  const now = getToday(today);
   const currentYear = now.getFullYear();
   const currentMonth = now.getMonth() + 1; // 1=enero, ..., 12=diciembre
   const currentDay = now.getDate();
@@ -184,17 +208,13 @@ interface VariationPeriodWindows {
   periodPreviousLabel: string;
 }
 
-function todayLocal(): Date {
-  return new Date();
-}
-
-function variationPeriodWindows(period: "day" | "week" | "month"): VariationPeriodWindows {
-  const now = new Date();
+function variationPeriodWindows(period: "day" | "week" | "month", today?: string): VariationPeriodWindows {
+  const now = getToday(today);
   const localYear = now.getFullYear();
   const localMonth = now.getMonth() + 1;
   const localDay = now.getDate();
 
-  const todayLocal = new Date(localYear, localMonth - 1, localDay);
+  const todayLocalDate = new Date(localYear, localMonth - 1, localDay);
   const yesterdayLocal = new Date(localYear, localMonth - 1, localDay - 1);
   const dayBeforeLocal = new Date(localYear, localMonth - 1, localDay - 2);
 
@@ -404,13 +424,14 @@ function isEmbiPublisherName(name: string | undefined): boolean {
 router.get("/summary", async (req: Request, res: Response) => {
   try {
     const scopeRaw = String(req.query.scope ?? "general").toLowerCase();
+    const today = req.query.today as string | undefined;
     if (!["general", "sasha", "embi"].includes(scopeRaw)) {
       res.status(400).json({ error: "Invalid scope (use general, sasha, embi)" });
       return;
     }
     const scope = scopeRaw as "general" | "sasha" | "embi";
 
-    const w = summaryMonthWindows();
+    const w = summaryMonthWindows(today);
     const client = createClient();
 
     // Query previous month always
@@ -559,12 +580,13 @@ router.get("/summary", async (req: Request, res: Response) => {
 router.get("/summary/by-prefix/:prefix", async (req: Request, res: Response) => {
   try {
     const prefix = (String(req.params.prefix ?? "")).toUpperCase().trim();
+    const today = req.query.today as string | undefined;
     if (!prefix || prefix.length < 2) {
       res.status(400).json({ error: "Prefix is required (min 2 chars)" });
       return;
     }
 
-    const w = summaryMonthWindows();
+    const w = summaryMonthWindows(today);
     const client = createClient();
 
     const prevPromise = fetchMetricsGrouped(client, w.prevMonthStart, w.prevMonthEnd, ["publisher"]);
@@ -678,10 +700,11 @@ router.get("/summary/by-prefix/:prefix", async (req: Request, res: Response) => 
   }
 });
 
-router.get("/trend/sasha", async (_req: Request, res: Response) => {
+router.get("/trend/sasha", async (req: Request, res: Response) => {
   try {
+    const today = req.query.today as string | undefined;
     const client = createClient();
-    const end = addDays(todayLocal(), -1);
+    const end = addDays(todayLocal(today), -1);
     const start = addDays(end, -29);
     const prefix = "SB";
 
@@ -750,10 +773,11 @@ router.get("/trend/sasha", async (_req: Request, res: Response) => {
   }
 });
 
-router.get("/trend/embi", async (_req: Request, res: Response) => {
+router.get("/trend/embi", async (req: Request, res: Response) => {
   try {
+    const today = req.query.today as string | undefined;
     const client = createClient();
-    const end = addDays(todayLocal(), -1);
+    const end = addDays(todayLocal(today), -1);
     const start = addDays(end, -29);
     const prefix = "EM";
 
@@ -825,13 +849,14 @@ router.get("/trend/embi", async (_req: Request, res: Response) => {
 router.get("/trend/by-prefix/:prefix", async (req: Request, res: Response) => {
   try {
     const prefix = (String(req.params.prefix ?? "")).toUpperCase().trim();
+    const today = req.query.today as string | undefined;
     if (!prefix || prefix.length < 2) {
       res.status(400).json({ error: "Prefix is required (min 2 chars)" });
       return;
     }
 
     const client = createClient();
-    const end = addDays(todayLocal(), -1);
+    const end = addDays(todayLocal(today), -1);
     const start = addDays(end, -29);
 
     const discoverEnd = formatDate(end);
@@ -899,10 +924,11 @@ router.get("/trend/by-prefix/:prefix", async (req: Request, res: Response) => {
   }
 });
 
-router.get("/trend", async (_req: Request, res: Response) => {
+router.get("/trend", async (req: Request, res: Response) => {
   try {
+    const today = req.query.today as string | undefined;
     const client = createClient();
-    const end = addDays(todayLocal(), -1);
+    const end = addDays(todayLocal(today), -1);
     const start = addDays(end, -29);
     const params = new URLSearchParams();
     appendTenantParams(params);
@@ -1870,6 +1896,7 @@ router.get("/variations", async (req: Request, res: Response) => {
     const periodRaw = String(req.query.period ?? "day").toLowerCase();
     const aggregateRaw = String(req.query.aggregate ?? "total").toLowerCase();
     const metricRaw = String(req.query.metric ?? "revenue").toLowerCase();
+    const today = req.query.today as string | undefined;
 
     if (!["day", "week", "month"].includes(periodRaw)) {
       res.status(400).json({ error: "Invalid period (use day, week, month)" });
@@ -1888,7 +1915,7 @@ router.get("/variations", async (req: Request, res: Response) => {
     const aggregate = aggregateRaw as "total" | "avg";
     const metric = metricRaw as "revenue" | "impressions" | "ad_requests";
 
-    const windows = variationPeriodWindows(period);
+    const windows = variationPeriodWindows(period, today);
     const client = createClient();
 
     let publishers: VariationRow[];
@@ -2161,14 +2188,15 @@ async function fetchMetricsGrouped(
   return rows;
 }
 
-router.get("/sasha-publishers", async (_req: Request, res: Response) => {
+router.get("/sasha-publishers", async (req: Request, res: Response) => {
   try {
+    const today = req.query.today as string | undefined;
     const client = createClient();
-    const end = addDays(todayLocal(), -1);
+    const now = getToday(today);
+    const end = addDays(now, -1);
     const start = addDays(end, -29);
     const prefix = "SB";
 
-    const now = new Date();
     const currentDay = now.getDate();
     const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
     const hasCurrentMonthData = currentDay > 1;
@@ -2371,14 +2399,15 @@ router.get("/sasha-publishers", async (_req: Request, res: Response) => {
   }
 });
 
-router.get("/embi-publishers", async (_req: Request, res: Response) => {
+router.get("/embi-publishers", async (req: Request, res: Response) => {
   try {
+    const today = req.query.today as string | undefined;
     const client = createClient();
-    const end = addDays(todayLocal(), -1);
+    const now = getToday(today);
+    const end = addDays(now, -1);
     const start = addDays(end, -29);
     const prefix = "EM";
 
-    const now = new Date();
     const currentDay = now.getDate();
     const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
     const hasCurrentMonthData = currentDay > 1;
@@ -2589,16 +2618,17 @@ router.get("/embi-publishers", async (_req: Request, res: Response) => {
 router.get("/media-buyer/:prefix", async (req: Request, res: Response) => {
   try {
     const prefix = (String(req.params.prefix ?? "")).toUpperCase().trim();
+    const today = req.query.today as string | undefined;
     if (!prefix || prefix.length < 2) {
       res.status(400).json({ error: "Prefix is required (min 2 chars)" });
       return;
     }
 
     const client = createClient();
-    const end = addDays(todayLocal(), -1);
+    const now = getToday(today);
+    const end = addDays(now, -1);
     const start = addDays(end, -29);
 
-    const now = new Date();
     const currentDay = now.getDate();
     const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
     const hasCurrentMonthData = currentDay > 1;
@@ -2808,6 +2838,7 @@ type TopTenMetric = 'revenue' | 'impressions' | 'ad_requests';
 
 router.get("/top-ten", async (req: Request, res: Response) => {
   try {
+    const today = req.query.today as string | undefined;
     const periodRaw = String(req.query.period ?? '7days').toLowerCase();
     const validPeriods: TopTenPeriod[] = ['yesterday', '7days', '30days'];
     if (!validPeriods.includes(periodRaw as TopTenPeriod)) {
@@ -2831,7 +2862,7 @@ router.get("/top-ten", async (req: Request, res: Response) => {
       : scopeRaw;
 
     const client = createClient();
-    const end = addDays(todayLocal(), -1);
+    const end = addDays(todayLocal(today), -1);
     let start: Date;
     let periodLabel: string;
 
@@ -2973,13 +3004,14 @@ router.get("/top-ten", async (req: Request, res: Response) => {
 router.get("/dropped-ad-units", async (req: Request, res: Response) => {
   try {
     const scopeRaw = String(req.query.scope ?? 'general').toLowerCase();
+    const today = req.query.today as string | undefined;
     const scopeLabel = scopeRaw === 'general' ? 'General' 
       : scopeRaw === 'sasha' ? 'Sasha Balbi' 
       : scopeRaw === 'embi' ? 'Embi Media' 
       : scopeRaw;
 
     const client = createClient();
-    const end = addDays(todayLocal(), -1);
+    const end = addDays(todayLocal(today), -1);
     const startRecent = addDays(end, -7);
     const startPast = addDays(end, -30);
 
@@ -3109,13 +3141,14 @@ router.get("/dropped-ad-units", async (req: Request, res: Response) => {
 router.get("/dropped-publishers", async (req: Request, res: Response) => {
   try {
     const scopeRaw = String(req.query.scope ?? 'general').toLowerCase();
+    const today = req.query.today as string | undefined;
     const scopeLabel = scopeRaw === 'general' ? 'General' 
       : scopeRaw === 'sasha' ? 'Sasha Balbi' 
       : scopeRaw === 'embi' ? 'Embi Media' 
       : scopeRaw;
 
     const client = createClient();
-    const end = addDays(todayLocal(), -1);
+    const end = addDays(todayLocal(today), -1);
     const startRecent = addDays(end, -7);
     const startPast = addDays(end, -30);
 
@@ -3242,11 +3275,12 @@ router.get("/alerts/daily-drop", async (req: Request, res: Response) => {
   try {
     const client = createClient();
     const scopeRaw = String(req.query.scope ?? 'general').toLowerCase();
+    const today = req.query.today as string | undefined;
     const scopeLabel = scopeRaw === 'general' ? 'General'
       : scopeRaw === 'sasha' ? 'Sasha Balbi'
       : scopeRaw === 'embi' ? 'Embi Media'
       : scopeRaw;
-    const now = todayLocal();
+    const now = todayLocal(today);
     const end = addDays(now, -1);
     const endStr = formatDate(end);
 
@@ -3269,8 +3303,8 @@ router.get("/alerts/daily-drop", async (req: Request, res: Response) => {
     if (isMonday) {
       const saturday = formatDate(addDays(end, -1));
       const sunday = endStr;
-      const thursday = formatDate(addDays(end, -4));
-      const friday = formatDate(addDays(end, -3));
+      const thursday = formatDate(addDays(end, -3));
+      const friday = formatDate(addDays(end, -2));
       currentStart = saturday;
       currentEnd = sunday;
       previousStart = thursday;
@@ -3350,28 +3384,9 @@ router.get("/alerts/daily-drop", async (req: Request, res: Response) => {
       }
     }
 
-    const previousPublishers = new Map<string, { name: string; totalAr: number; days: number }>();
-    for (const r of filteredPreviousRows) {
-      const ar = toNum(r.ad_requests);
-      if (ar < 5000) continue;
-      const key = String(r.publisher_id);
-      const existing = previousPublishers.get(key);
-      if (!existing) {
-        previousPublishers.set(key, {
-          name: r.publisher_name?.trim() || `Publisher ${r.publisher_id}`,
-          totalAr: ar,
-          days: 1,
-        });
-      } else {
-        existing.totalAr += ar;
-        existing.days += 1;
-      }
-    }
-
     const currentAdUnits = new Map<string, { name: string; publisherName: string; totalAr: number; days: number }>();
     for (const r of filteredCurrentRows) {
       const ar = toNum(r.ad_requests);
-      if (ar < 5000) continue;
       const key = `${r.ad_unit_id}-${r.publisher_id ?? 0}`;
       const existing = currentAdUnits.get(key);
       if (!existing) {
@@ -3387,10 +3402,26 @@ router.get("/alerts/daily-drop", async (req: Request, res: Response) => {
       }
     }
 
+    const previousPublishers = new Map<string, { name: string; totalAr: number; days: number }>();
+    for (const r of filteredPreviousRows) {
+      const ar = toNum(r.ad_requests);
+      const key = String(r.publisher_id);
+      const existing = previousPublishers.get(key);
+      if (!existing) {
+        previousPublishers.set(key, {
+          name: r.publisher_name?.trim() || `Publisher ${r.publisher_id}`,
+          totalAr: ar,
+          days: 1,
+        });
+      } else {
+        existing.totalAr += ar;
+        existing.days += 1;
+      }
+    }
+
     const currentPublishers = new Map<string, { name: string; totalAr: number; days: number }>();
     for (const r of filteredCurrentRows) {
       const ar = toNum(r.ad_requests);
-      if (ar < 5000) continue;
       const key = String(r.publisher_id);
       const existing = currentPublishers.get(key);
       if (!existing) {

@@ -1,3 +1,11 @@
+export function getTodayDate(): string {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 export interface TrendPoint {
   date: string
   revenue: number
@@ -79,7 +87,8 @@ export interface SashaPublishersResponse {
 }
 
 export async function fetchSashaPublishers(): Promise<SashaPublishersResponse> {
-  const res = await fetch('/api/sasha-publishers')
+  const today = getTodayDate()
+  const res = await fetch(`/api/sasha-publishers?today=${today}`)
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
     throw new Error((body as { error?: string }).error ?? res.statusText)
@@ -88,7 +97,8 @@ export async function fetchSashaPublishers(): Promise<SashaPublishersResponse> {
 }
 
 export async function fetchEmbiPublishers(): Promise<SashaPublishersResponse> {
-  const res = await fetch('/api/embi-publishers')
+  const today = getTodayDate()
+  const res = await fetch(`/api/embi-publishers?today=${today}`)
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
     throw new Error((body as { error?: string }).error ?? res.statusText)
@@ -97,7 +107,8 @@ export async function fetchEmbiPublishers(): Promise<SashaPublishersResponse> {
 }
 
 export async function fetchMediaBuyer(prefix: string): Promise<SashaPublishersResponse> {
-  const res = await fetch(`/api/media-buyer/${encodeURIComponent(prefix)}`)
+  const today = getTodayDate()
+  const res = await fetch(`/api/media-buyer/${encodeURIComponent(prefix)}?today=${today}`)
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
     throw new Error((body as { error?: string }).error ?? res.statusText)
@@ -129,7 +140,8 @@ export interface SummaryResponse {
 }
 
 export async function fetchSummary(scope: SummaryScope): Promise<SummaryResponse> {
-  const res = await fetch(`/api/summary?scope=${encodeURIComponent(scope)}`)
+  const today = getTodayDate()
+  const res = await fetch(`/api/summary?scope=${encodeURIComponent(scope)}&today=${today}`)
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
     throw new Error((body as { error?: string }).error ?? res.statusText)
@@ -138,7 +150,8 @@ export async function fetchSummary(scope: SummaryScope): Promise<SummaryResponse
 }
 
 export async function fetchSummaryByPrefix(prefix: string): Promise<SummaryResponse> {
-  const res = await fetch(`/api/summary/by-prefix/${encodeURIComponent(prefix)}`)
+  const today = getTodayDate()
+  const res = await fetch(`/api/summary/by-prefix/${encodeURIComponent(prefix)}?today=${today}`)
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
     throw new Error((body as { error?: string }).error ?? res.statusText)
@@ -147,7 +160,8 @@ export async function fetchSummaryByPrefix(prefix: string): Promise<SummaryRespo
 }
 
 export async function fetchTrend(): Promise<TrendPoint[]> {
-  const res = await fetch('/api/trend')
+  const today = getTodayDate()
+  const res = await fetch(`/api/trend?today=${today}`)
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
     throw new Error((body as { error?: string }).error ?? res.statusText)
@@ -157,7 +171,8 @@ export async function fetchTrend(): Promise<TrendPoint[]> {
 }
 
 export async function fetchSashaTrend(): Promise<TrendPoint[]> {
-  const res = await fetch('/api/trend/sasha')
+  const today = getTodayDate()
+  const res = await fetch(`/api/trend/sasha?today=${today}`)
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
     throw new Error((body as { error?: string }).error ?? res.statusText)
@@ -167,7 +182,8 @@ export async function fetchSashaTrend(): Promise<TrendPoint[]> {
 }
 
 export async function fetchEmbiTrend(): Promise<TrendPoint[]> {
-  const res = await fetch('/api/trend/embi')
+  const today = getTodayDate()
+  const res = await fetch(`/api/trend/embi?today=${today}`)
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
     throw new Error((body as { error?: string }).error ?? res.statusText)
@@ -177,7 +193,8 @@ export async function fetchEmbiTrend(): Promise<TrendPoint[]> {
 }
 
 export async function fetchTrendByPrefix(prefix: string): Promise<TrendPoint[]> {
-  const res = await fetch(`/api/trend/by-prefix/${encodeURIComponent(prefix)}`)
+  const today = getTodayDate()
+  const res = await fetch(`/api/trend/by-prefix/${encodeURIComponent(prefix)}?today=${today}`)
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
     throw new Error((body as { error?: string }).error ?? res.statusText)
@@ -191,12 +208,14 @@ export async function fetchVariations(params?: {
   aggregate?: VariationAggregate
   metric?: VariationMetric
 }): Promise<VariationsResponse> {
+  const today = getTodayDate()
   const sp = new URLSearchParams()
+  sp.set('today', today)
   if (params?.period) sp.set('period', params.period)
   if (params?.aggregate) sp.set('aggregate', params.aggregate)
   if (params?.metric) sp.set('metric', params.metric)
   const q = sp.toString()
-  const res = await fetch(`/api/variations${q ? `?${q}` : ''}`)
+  const res = await fetch(`/api/variations?${q}`)
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
     throw new Error((body as { error?: string }).error ?? res.statusText)
@@ -229,12 +248,14 @@ export interface TopTenResponse {
 }
 
 export async function fetchTopTen(period?: TopTenPeriod, metric?: TopTenMetric, scope?: string): Promise<TopTenResponse> {
+  const today = getTodayDate()
   const params = new URLSearchParams()
+  params.set('today', today)
   if (period) params.set('period', period)
   if (metric) params.set('metric', metric)
   if (scope) params.set('scope', scope)
   const q = params.toString()
-  const res = await fetch(`/api/top-ten${q ? `?${q}` : ''}`)
+  const res = await fetch(`/api/top-ten?${q}`)
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
     throw new Error((body as { error?: string }).error ?? res.statusText)
@@ -276,10 +297,12 @@ export interface DroppedPublishersResponse {
 }
 
 export async function fetchDroppedAdUnits(scope?: string): Promise<DroppedAdUnitsResponse> {
+  const today = getTodayDate()
   const params = new URLSearchParams()
+  params.set('today', today)
   if (scope) params.set('scope', scope)
   const q = params.toString()
-  const res = await fetch(`/api/dropped-ad-units${q ? `?${q}` : ''}`)
+  const res = await fetch(`/api/dropped-ad-units?${q}`)
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
     throw new Error((body as { error?: string }).error ?? res.statusText)
@@ -288,10 +311,12 @@ export async function fetchDroppedAdUnits(scope?: string): Promise<DroppedAdUnit
 }
 
 export async function fetchDroppedPublishers(scope?: string): Promise<DroppedPublishersResponse> {
+  const today = getTodayDate()
   const params = new URLSearchParams()
+  params.set('today', today)
   if (scope) params.set('scope', scope)
   const q = params.toString()
-  const res = await fetch(`/api/dropped-publishers${q ? `?${q}` : ''}`)
+  const res = await fetch(`/api/dropped-publishers?${q}`)
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
     throw new Error((body as { error?: string }).error ?? res.statusText)
@@ -349,8 +374,12 @@ export interface DailyDropAlertResponse {
 }
 
 export async function fetchDailyDropAlert(scope?: string): Promise<DailyDropAlertResponse> {
-  const url = scope ? `/api/alerts/daily-drop?scope=${encodeURIComponent(scope)}` : '/api/alerts/daily-drop'
-  const res = await fetch(url)
+  const today = getTodayDate()
+  const params = new URLSearchParams()
+  params.set('today', today)
+  if (scope) params.set('scope', scope)
+  const q = params.toString()
+  const res = await fetch(`/api/alerts/daily-drop?${q}`)
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
     throw new Error((body as { error?: string }).error ?? res.statusText)
