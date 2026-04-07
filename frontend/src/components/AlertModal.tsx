@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { fetchDailyDropAlert } from '../api/metrics'
-import { formatNumber } from '../utils/formatters'
+import { formatNumber, formatMoney } from '../utils/formatters'
 
 interface AlertModalProps {
   onClose: () => void
@@ -11,9 +11,13 @@ interface AlertModalProps {
 const COOKIE_NAME = 'daily_alert_dismissed'
 
 export function getAlertCookie(): string | null {
-  if (typeof document === 'undefined') return null
-  const match = document.cookie.match(new RegExp(`(^| )${COOKIE_NAME}=([^;]+)`))
-  return match ? match[2] : null
+  try {
+    if (typeof document === 'undefined') return null
+    const match = document.cookie.match(new RegExp(`(^| )${COOKIE_NAME}=([^;]+)`))
+    return match ? match[2] : null
+  } catch {
+    return null
+  }
 }
 
 export function setAlertCookie() {
@@ -31,11 +35,12 @@ export function AlertModal({ onClose, defaultMediaBuyer }: AlertModalProps) {
     queryKey: ['alerts', 'daily-drop', defaultMediaBuyer?.id],
     queryFn: () => fetchDailyDropAlert(defaultMediaBuyer?.id),
     staleTime: 5 * 60 * 1000,
+    retry: 1,
   })
 
   const totalAlerts = (data?.droppedAdUnits.length ?? 0) + (data?.droppedPublishers.length ?? 0) + (data?.recoveredAdUnits.length ?? 0) + (data?.recoveredPublishers.length ?? 0)
 
-  const firstName = defaultMediaBuyer?.name.split(' ')[0]
+  const firstName = defaultMediaBuyer?.name?.split(' ')?.[0]
   const modalTitle = firstName ? `Hola ${firstName}, este es tu resumen del día:` : 'Cambios diarios'
 
   if (isLoading) {
@@ -115,9 +120,9 @@ export function AlertModal({ onClose, defaultMediaBuyer }: AlertModalProps) {
                   {d.dailyMetrics.map((metric) => (
                     <tr key={metric.date} className="border-b border-slate-800/50">
                       <td className="py-1.5 pr-4 text-slate-400">{metric.date}</td>
-                      <td className="text-right py-1.5 px-2 text-emerald-400 font-medium">${formatNumber(metric.revenue)}</td>
-                      <td className="text-right py-1.5 px-2 text-red-400 font-medium">${formatNumber(metric.cost)}</td>
-                      <td className="text-right py-1.5 pl-2 text-violet-300 font-medium">${formatNumber(metric.profit)}</td>
+                      <td className="text-right py-1.5 px-2 text-emerald-400 font-medium">${formatMoney(metric.revenue)}</td>
+                      <td className="text-right py-1.5 px-2 text-red-400 font-medium">${formatMoney(metric.cost)}</td>
+                      <td className="text-right py-1.5 pl-2 text-violet-300 font-medium">${formatMoney(metric.profit)}</td>
                     </tr>
                   ))}
                 </tbody>

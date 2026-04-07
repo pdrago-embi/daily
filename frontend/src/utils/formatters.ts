@@ -5,12 +5,26 @@ export function formatCurrency(
   return new Intl.NumberFormat(undefined, {
     style: 'currency',
     currency: 'USD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
     ...options,
   }).format(n)
 }
 
+export function formatMoney(n: number): string {
+  return new Intl.NumberFormat(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(n)
+}
+
 export function formatCurrencyCompact(n: number): string {
-  return formatCurrency(n, { maximumFractionDigits: 0 })
+  return new Intl.NumberFormat(undefined, {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(n)
 }
 
 export function formatPercentage(

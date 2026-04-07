@@ -79,16 +79,6 @@ function parseTodayParam(today: string | undefined): Date | null {
   return parsed;
 }
 
-function todayLocal(today?: string | undefined): Date {
-  const browserDate = parseTodayParam(today);
-  return browserDate || new Date();
-}
-
-function todayLocalWithFallback(today: string | undefined): Date {
-  const browserDate = parseTodayParam(today);
-  return browserDate || new Date();
-}
-
 function getToday(today?: string | undefined): Date {
   return parseTodayParam(today) || new Date();
 }
@@ -704,7 +694,7 @@ router.get("/trend/sasha", async (req: Request, res: Response) => {
   try {
     const today = req.query.today as string | undefined;
     const client = createClient();
-    const end = addDays(todayLocal(today), -1);
+    const end = addDays(getToday(today), -1);
     const start = addDays(end, -29);
     const prefix = "SB";
 
@@ -777,7 +767,7 @@ router.get("/trend/embi", async (req: Request, res: Response) => {
   try {
     const today = req.query.today as string | undefined;
     const client = createClient();
-    const end = addDays(todayLocal(today), -1);
+    const end = addDays(getToday(today), -1);
     const start = addDays(end, -29);
     const prefix = "EM";
 
@@ -856,7 +846,7 @@ router.get("/trend/by-prefix/:prefix", async (req: Request, res: Response) => {
     }
 
     const client = createClient();
-    const end = addDays(todayLocal(today), -1);
+    const end = addDays(getToday(today), -1);
     const start = addDays(end, -29);
 
     const discoverEnd = formatDate(end);
@@ -928,7 +918,7 @@ router.get("/trend", async (req: Request, res: Response) => {
   try {
     const today = req.query.today as string | undefined;
     const client = createClient();
-    const end = addDays(todayLocal(today), -1);
+    const end = addDays(getToday(today), -1);
     const start = addDays(end, -29);
     const params = new URLSearchParams();
     appendTenantParams(params);
@@ -2188,213 +2178,192 @@ async function fetchMetricsGrouped(
   return rows;
 }
 
+async function fetchPublisherData(
+  client: AxiosInstance,
+  today: string | undefined,
+  prefix: string
+): Promise<{
+  displayMonthLabel: string;
+  displayDateRange: string;
+  dataDaysElapsed: number;
+  daysInMonth: number;
+  hasCurrentMonthData: boolean;
+  totals: {
+    adRequests: number;
+    impressions: number;
+    revenue: number;
+    cost: number;
+    profit: number;
+    projectedAdRequests: number;
+    projectedImpressions: number;
+    projectedRevenue: number;
+    projectedCost: number;
+    projectedProfit: number;
+  };
+  publishers: { publisher_id: number; publisher_name: string; adRequests: number; impressions: number; revenue: number; cost: number; profit: number }[];
+  daily: { date: string; adRequests: number; impressions: number; revenue: number; cost: number; profit: number }[];
+}> {
+  const now = getToday(today);
+  const end = addDays(now, -1);
+
+  const currentDay = now.getDate();
+  const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const hasCurrentMonthData = currentDay > 1;
+  const dim = lastDay;
+  const de = hasCurrentMonthData ? currentDay - 1 : 0;
+
+  const monthStart = formatDate(new Date(now.getFullYear(), now.getMonth(), 1));
+  const monthEnd = formatDate(new Date(now.getFullYear(), now.getMonth(), currentDay - 1));
+
+  const isFirstDayOfMonth = currentDay === 1;
+  const dataStart = isFirstDayOfMonth
+    ? formatDate(new Date(now.getFullYear(), now.getMonth() - 1, 1))
+    : monthStart;
+  const dataEnd = isFirstDayOfMonth
+    ? formatDate(new Date(now.getFullYear(), now.getMonth(), 0))
+    : monthEnd;
+
+  const dataDaysElapsed = isFirstDayOfMonth ? lastDay : de;
+
+  const displayMonthLabel = isFirstDayOfMonth
+    ? monthTitleEs(dataStart)
+    : monthTitleEs(monthStart);
+  const displayDateRange = isFirstDayOfMonth
+    ? `${dataStart} al ${dataEnd}`
+    : `${monthStart} al ${monthEnd}`;
+
+  const project = (cur: number): number => (dataDaysElapsed > 0) ? (cur / dataDaysElapsed) * dim : 0;
+
+  const discoverEnd = formatDate(end);
+  const discoverStart = formatDate(addDays(end, -364));
+  const discoverRows = await fetchMetricsGrouped(client, discoverStart, discoverEnd, ["publisher"]);
+
+  const prefixNames = new Set<string>();
+  for (const row of discoverRows) {
+    const name = row.publisher_name ?? "";
+    if (name.trim().toUpperCase().startsWith(prefix.toUpperCase())) {
+      prefixNames.add(name);
+    }
+  }
+
+  if (prefixNames.size === 0) {
+    return {
+      displayMonthLabel,
+      displayDateRange,
+      dataDaysElapsed,
+      daysInMonth: dim,
+      hasCurrentMonthData,
+      totals: { adRequests: 0, impressions: 0, revenue: 0, cost: 0, profit: 0, projectedAdRequests: 0, projectedImpressions: 0, projectedRevenue: 0, projectedCost: 0, projectedProfit: 0 },
+      publishers: [],
+      daily: [],
+    };
+  }
+
+  const params = new URLSearchParams();
+  appendTenantParams(params);
+  params.set("groupBy", "publisher");
+  params.set("startDate", dataStart);
+  params.set("endDate", dataEnd);
+
+  const { data } = await client.get<{ data: AggregatedRow[] }>(`/api/metrics/aggregated?${params.toString()}`);
+
+  type PubSnap = { publisher_id: number; publisher_name: string; adRequests: number; impressions: number; revenue: number; cost: number; profit: number };
+
+  const curById = new Map<string, PubSnap>();
+  for (const row of data.data ?? []) {
+    const name = row.publisher_name;
+    if (!name || !prefixNames.has(name)) continue;
+    curById.set(name, {
+      publisher_id: 0,
+      publisher_name: name,
+      adRequests: toNum((row as any).total_ad_requests),
+      impressions: toNum((row as any).total_impressions),
+      revenue: toNum(row.total_revenue),
+      cost: toNum(row.total_cost),
+      profit: toNum(row.total_profit),
+    });
+  }
+
+  let totalAdRequests = 0, totalImpressions = 0, totalRevenue = 0, totalCost = 0, totalProfit = 0;
+  for (const c of curById.values()) {
+    totalAdRequests += c.adRequests;
+    totalImpressions += c.impressions;
+    totalRevenue += c.revenue;
+    totalCost += c.cost;
+    totalProfit += c.profit;
+  }
+
+  const publishers = [...curById.values()].sort((a, b) => b.revenue - a.revenue);
+
+  const dailyRows = await fetchMetricsGrouped(client, dataStart, dataEnd, ["publisher", "date"]);
+
+  const dailyTotals = new Map<string, { adRequests: number; impressions: number; revenue: number; cost: number; profit: number }>();
+  for (const row of dailyRows) {
+    const name = row.publisher_name;
+    if (!name || !prefixNames.has(name)) continue;
+    const date = row.date;
+    if (!date) continue;
+    const dateKey = date.split('T')[0];
+    const existing = dailyTotals.get(dateKey) || { adRequests: 0, impressions: 0, revenue: 0, cost: 0, profit: 0 };
+    dailyTotals.set(dateKey, {
+      adRequests: existing.adRequests + toNum(row.ad_requests),
+      impressions: existing.impressions + toNum(row.impressions),
+      revenue: existing.revenue + toNum(row.revenue ?? 0),
+      cost: existing.cost + toNum(row.cost ?? 0),
+      profit: existing.profit + toNum(row.profit ?? 0),
+    });
+  }
+
+  const daily: { date: string; adRequests: number; impressions: number; revenue: number; cost: number; profit: number }[] = [];
+  let currentDate = new Date(dataStart);
+  const endDateObj = new Date(dataEnd);
+  while (currentDate <= endDateObj) {
+    const dateStr = formatDate(currentDate);
+    daily.push({ date: dateStr, ...(dailyTotals.get(dateStr) || { adRequests: 0, impressions: 0, revenue: 0, cost: 0, profit: 0 }) });
+    currentDate = new Date(currentDate.getTime() + 24 * 60 * 60 * 1000);
+  }
+
+  return {
+    displayMonthLabel,
+    displayDateRange,
+    dataDaysElapsed,
+    daysInMonth: dim,
+    hasCurrentMonthData,
+    totals: {
+      adRequests: totalAdRequests,
+      impressions: totalImpressions,
+      revenue: totalRevenue,
+      cost: totalCost,
+      profit: totalProfit,
+      projectedAdRequests: project(totalAdRequests),
+      projectedImpressions: project(totalImpressions),
+      projectedRevenue: project(totalRevenue),
+      projectedCost: project(totalCost),
+      projectedProfit: project(totalProfit),
+    },
+    publishers: publishers.map(p => ({ publisher_id: p.publisher_id, publisher_name: p.publisher_name, adRequests: p.adRequests, impressions: p.impressions, revenue: p.revenue, cost: p.cost, profit: p.profit })),
+    daily,
+  };
+}
+
 router.get("/sasha-publishers", async (req: Request, res: Response) => {
   try {
     const today = req.query.today as string | undefined;
     const client = createClient();
-    const now = getToday(today);
-    const end = addDays(now, -1);
-    const start = addDays(end, -29);
-    const prefix = "SB";
-
-    const currentDay = now.getDate();
-    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-    const hasCurrentMonthData = currentDay > 1;
-    const dim = lastDay;
-    const de = hasCurrentMonthData ? currentDay - 1 : 0;
-    
-    const monthStart = formatDate(new Date(now.getFullYear(), now.getMonth(), 1));
-    const monthEnd = formatDate(new Date(now.getFullYear(), now.getMonth(), currentDay - 1));
-    
-    const isFirstDayOfMonth = currentDay === 1;
-    const dataStart = isFirstDayOfMonth 
-      ? formatDate(new Date(now.getFullYear(), now.getMonth() - 1, 1))
-      : monthStart;
-    const dataEnd = isFirstDayOfMonth
-      ? formatDate(new Date(now.getFullYear(), now.getMonth(), 0))
-      : monthEnd;
-    
-    const dataDaysElapsed = isFirstDayOfMonth
-      ? lastDay
-      : de;
-    
-    const displayMonthLabel = isFirstDayOfMonth
-      ? monthTitleEs(dataStart)
-      : monthTitleEs(monthStart);
-    const displayDateRange = isFirstDayOfMonth
-      ? `${dataStart} al ${dataEnd}`
-      : `${monthStart} al ${monthEnd}`;
-    
-    const project = (cur: number): number => (dataDaysElapsed > 0) ? (cur / dataDaysElapsed) * dim : 0;
-
-    const discoverEnd = formatDate(end);
-    const discoverStart = formatDate(addDays(end, -364));
-    const discoverRows = await fetchMetricsGrouped(
-      client,
-      discoverStart,
-      discoverEnd,
-      ["publisher"]
-    );
-
-    const sashaNames = new Set<string>();
-    for (const row of discoverRows) {
-      const name = row.publisher_name ?? "";
-      if (name.trim().toUpperCase().startsWith(prefix.toUpperCase())) {
-        sashaNames.add(name);
-      }
-    }
-
-    if (sashaNames.size === 0) {
-      res.json({
-        currentMonthLabel: displayMonthLabel,
-        dateRange: displayDateRange,
-        daysElapsed: dataDaysElapsed,
-        daysInMonth: dim,
-        hasCurrentMonthData,
-        totals: {
-          adRequests: 0,
-          impressions: 0,
-          revenue: 0,
-          cost: 0,
-          profit: 0,
-          projectedAdRequests: 0,
-          projectedImpressions: 0,
-          projectedRevenue: 0,
-          projectedCost: 0,
-          projectedProfit: 0,
-        },
-        publishers: [],
-      });
-      return;
-    }
-
-    const params = new URLSearchParams();
-    appendTenantParams(params);
-    params.set("groupBy", "publisher");
-    params.set("startDate", dataStart);
-    params.set("endDate", dataEnd);
-
-    const { data } = await client.get<{ data: AggregatedRow[] }>(
-      `/api/metrics/aggregated?${params.toString()}`
-    );
-
-    type PubSnap = {
-      publisher_id: number;
-      publisher_name: string;
-      adRequests: number;
-      impressions: number;
-      revenue: number;
-      cost: number;
-      profit: number;
-    };
-
-    const curById = new Map<string, PubSnap>();
-    for (const row of data.data ?? []) {
-      const name = row.publisher_name;
-      if (!name) continue;
-      if (!sashaNames.has(name)) continue;
-      
-      curById.set(name, {
-        publisher_id: 0,
-        publisher_name: name,
-        adRequests: toNum((row as any).total_ad_requests),
-        impressions: toNum((row as any).total_impressions),
-        revenue: toNum(row.total_revenue),
-        cost: toNum(row.total_cost),
-        profit: toNum(row.total_profit),
-      });
-    }
-
-    let totalAdRequests = 0;
-    let totalImpressions = 0;
-    let totalRevenue = 0;
-    let totalCost = 0;
-    let totalProfit = 0;
-
-    for (const [, c] of curById) {
-      totalAdRequests += c.adRequests;
-      totalImpressions += c.impressions;
-      totalRevenue += c.revenue;
-      totalCost += c.cost;
-      totalProfit += c.profit;
-    }
-
-    const publishers = [...curById.values()].sort((a, b) => b.revenue - a.revenue);
-
-    const dailyParams = new URLSearchParams();
-    appendTenantParams(dailyParams);
-    dailyParams.set("groupBy", "date");
-    dailyParams.set("startDate", dataStart);
-    dailyParams.set("endDate", dataEnd);
-
-    const { data: dailyData } = await client.get<{ data: AggregatedRow[] }>(
-      `/api/metrics/aggregated?${dailyParams.toString()}`
-    );
-
-    const sashaDailyTotals = new Map<string, { adRequests: number; impressions: number; revenue: number; cost: number; profit: number }>();
-    
-    for (const row of dailyData.data ?? []) {
-      const date = row.date;
-      if (!date) continue;
-      
-      const dateKey = date.split('T')[0];
-      
-      const existing = sashaDailyTotals.get(dateKey) || { adRequests: 0, impressions: 0, revenue: 0, cost: 0, profit: 0 };
-      sashaDailyTotals.set(dateKey, {
-        adRequests: existing.adRequests + toNum((row as any).total_ad_requests),
-        impressions: existing.impressions + toNum((row as any).total_impressions),
-        revenue: existing.revenue + toNum(row.total_revenue),
-        cost: existing.cost + toNum(row.total_cost),
-        profit: existing.profit + toNum(row.total_profit),
-      });
-    }
-
-    const daily: { date: string; adRequests: number; impressions: number; revenue: number; cost: number; profit: number }[] = [];
-    let currentDate = new Date(dataStart);
-    const endDate = new Date(dataEnd);
-    while (currentDate <= endDate) {
-      const dateStr = formatDate(currentDate);
-      const dayData = sashaDailyTotals.get(dateStr) || { adRequests: 0, impressions: 0, revenue: 0, cost: 0, profit: 0 };
-      daily.push({
-        date: dateStr,
-        ...dayData,
-      });
-      currentDate = new Date(currentDate.getTime() + 24 * 60 * 60 * 1000);
-    }
-
+    const result = await fetchPublisherData(client, today, "SB");
     res.json({
-      currentMonthLabel: displayMonthLabel,
-      dateRange: displayDateRange,
-      daysElapsed: dataDaysElapsed,
-      daysInMonth: dim,
-      hasCurrentMonthData,
-      totals: {
-        adRequests: totalAdRequests,
-        impressions: totalImpressions,
-        revenue: totalRevenue,
-        cost: totalCost,
-        profit: totalProfit,
-        projectedAdRequests: project(totalAdRequests),
-        projectedImpressions: project(totalImpressions),
-        projectedRevenue: project(totalRevenue),
-        projectedCost: project(totalCost),
-        projectedProfit: project(totalProfit),
-      },
-      publishers: publishers.map(p => ({
-        publisher_id: p.publisher_id,
-        publisher_name: p.publisher_name,
-        adRequests: p.adRequests,
-        impressions: p.impressions,
-        revenue: p.revenue,
-        cost: p.cost,
-        profit: p.profit,
-      })),
-      daily,
+      currentMonthLabel: result.displayMonthLabel,
+      dateRange: result.displayDateRange,
+      daysElapsed: result.dataDaysElapsed,
+      daysInMonth: result.daysInMonth,
+      hasCurrentMonthData: result.hasCurrentMonthData,
+      totals: result.totals,
+      publishers: result.publishers,
+      daily: result.daily,
     });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "Unknown error";
-    const status =
-      axios.isAxiosError(e) && e.response?.status ? e.response.status : 500;
+    const status = axios.isAxiosError(e) && e.response?.status ? e.response.status : 500;
     res.status(status).json({ error: msg });
   }
 });
@@ -2403,214 +2372,20 @@ router.get("/embi-publishers", async (req: Request, res: Response) => {
   try {
     const today = req.query.today as string | undefined;
     const client = createClient();
-    const now = getToday(today);
-    const end = addDays(now, -1);
-    const start = addDays(end, -29);
-    const prefix = "EM";
-
-    const currentDay = now.getDate();
-    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-    const hasCurrentMonthData = currentDay > 1;
-    const dim = lastDay;
-    const de = hasCurrentMonthData ? currentDay - 1 : 0;
-    
-    const monthStart = formatDate(new Date(now.getFullYear(), now.getMonth(), 1));
-    const monthEnd = formatDate(new Date(now.getFullYear(), now.getMonth(), currentDay - 1));
-    
-    const isFirstDayOfMonth = currentDay === 1;
-    const dataStart = isFirstDayOfMonth 
-      ? formatDate(new Date(now.getFullYear(), now.getMonth() - 1, 1))
-      : monthStart;
-    const dataEnd = isFirstDayOfMonth
-      ? formatDate(new Date(now.getFullYear(), now.getMonth(), 0))
-      : monthEnd;
-    
-    const dataDaysElapsed = isFirstDayOfMonth
-      ? lastDay
-      : de;
-    
-    const displayMonthLabel = isFirstDayOfMonth
-      ? monthTitleEs(dataStart)
-      : monthTitleEs(monthStart);
-    const displayDateRange = isFirstDayOfMonth
-      ? `${dataStart} al ${dataEnd}`
-      : `${monthStart} al ${monthEnd}`;
-    
-    const project = (cur: number): number => (dataDaysElapsed > 0) ? (cur / dataDaysElapsed) * dim : 0;
-
-    const discoverEnd = formatDate(end);
-    const discoverStart = formatDate(addDays(end, -364));
-    const discoverRows = await fetchMetricsGrouped(
-      client,
-      discoverStart,
-      discoverEnd,
-      ["publisher"]
-    );
-
-    const embiNames = new Set<string>();
-    for (const row of discoverRows) {
-      const name = row.publisher_name ?? "";
-      if (name.trim().toUpperCase().startsWith(prefix.toUpperCase())) {
-        embiNames.add(name);
-      }
-    }
-
-    console.log(`[EMBI] embiNames Set:`, JSON.stringify([...embiNames]));
-    console.log(`[EMBI] Found ${embiNames.size} EM publishers`);
-
-    if (embiNames.size === 0) {
-      res.json({
-        currentMonthLabel: displayMonthLabel,
-        dateRange: displayDateRange,
-        daysElapsed: dataDaysElapsed,
-        daysInMonth: dim,
-        hasCurrentMonthData,
-        totals: {
-          adRequests: 0,
-          impressions: 0,
-          revenue: 0,
-          cost: 0,
-          profit: 0,
-          projectedAdRequests: 0,
-          projectedImpressions: 0,
-          projectedRevenue: 0,
-          projectedCost: 0,
-          projectedProfit: 0,
-        },
-        publishers: [],
-        daily: [],
-      });
-      return;
-    }
-
-    const params = new URLSearchParams();
-    appendTenantParams(params);
-    params.set("groupBy", "publisher");
-    params.set("startDate", dataStart);
-    params.set("endDate", dataEnd);
-
-    const { data } = await client.get<{ data: AggregatedRow[] }>(
-      `/api/metrics/aggregated?${params.toString()}`
-    );
-
-    type PubSnap = {
-      publisher_id: number;
-      publisher_name: string;
-      adRequests: number;
-      impressions: number;
-      revenue: number;
-      cost: number;
-      profit: number;
-    };
-
-    const curById = new Map<string, PubSnap>();
-    for (const row of data.data ?? []) {
-      const name = row.publisher_name;
-      if (!name) continue;
-      if (!embiNames.has(name)) continue;
-      
-      curById.set(name, {
-        publisher_id: 0,
-        publisher_name: name,
-        adRequests: toNum((row as any).total_ad_requests),
-        impressions: toNum((row as any).total_impressions),
-        revenue: toNum(row.total_revenue),
-        cost: toNum(row.total_cost),
-        profit: toNum(row.total_profit),
-      });
-    }
-
-    let totalAdRequests = 0;
-    let totalImpressions = 0;
-    let totalRevenue = 0;
-    let totalCost = 0;
-    let totalProfit = 0;
-
-    for (const [, c] of curById) {
-      totalAdRequests += c.adRequests;
-      totalImpressions += c.impressions;
-      totalRevenue += c.revenue;
-      totalCost += c.cost;
-      totalProfit += c.profit;
-    }
-
-    const publishers = [...curById.values()].sort((a, b) => b.revenue - a.revenue);
-
-    const dailyRows = await fetchMetricsGrouped(
-      client,
-      dataStart,
-      dataEnd,
-      ["publisher", "date"]
-    );
-
-    const embiDailyTotals = new Map<string, { adRequests: number; impressions: number; revenue: number; cost: number; profit: number }>();
-    
-    for (const row of dailyRows) {
-      const name = row.publisher_name;
-      if (!name) continue;
-      if (!embiNames.has(name)) continue;
-      
-      const date = row.date;
-      if (!date) continue;
-      
-      const dateKey = date.split('T')[0];
-      
-      const existing = embiDailyTotals.get(dateKey) || { adRequests: 0, impressions: 0, revenue: 0, cost: 0, profit: 0 };
-      embiDailyTotals.set(dateKey, {
-        adRequests: existing.adRequests + toNum(row.ad_requests),
-        impressions: existing.impressions + toNum(row.impressions),
-        revenue: existing.revenue + toNum(row.revenue ?? 0),
-        cost: existing.cost + toNum(row.cost ?? 0),
-        profit: existing.profit + toNum(row.profit ?? 0),
-      });
-    }
-
-    const daily: { date: string; adRequests: number; impressions: number; revenue: number; cost: number; profit: number }[] = [];
-    let currentDate = new Date(dataStart);
-    const endDate = new Date(dataEnd);
-    while (currentDate <= endDate) {
-      const dateStr = formatDate(currentDate);
-      const dayData = embiDailyTotals.get(dateStr) || { adRequests: 0, impressions: 0, revenue: 0, cost: 0, profit: 0 };
-      daily.push({
-        date: dateStr,
-        ...dayData,
-      });
-      currentDate = new Date(currentDate.getTime() + 24 * 60 * 60 * 1000);
-    }
-
+    const result = await fetchPublisherData(client, today, "EM");
     res.json({
-      currentMonthLabel: displayMonthLabel,
-      dateRange: displayDateRange,
-      daysElapsed: dataDaysElapsed,
-      daysInMonth: dim,
-      hasCurrentMonthData,
-      totals: {
-        adRequests: totalAdRequests,
-        impressions: totalImpressions,
-        revenue: totalRevenue,
-        cost: totalCost,
-        profit: totalProfit,
-        projectedAdRequests: project(totalAdRequests),
-        projectedImpressions: project(totalImpressions),
-        projectedRevenue: project(totalRevenue),
-        projectedCost: project(totalCost),
-        projectedProfit: project(totalProfit),
-      },
-      publishers: publishers.map(p => ({
-        publisher_id: p.publisher_id,
-        publisher_name: p.publisher_name,
-        adRequests: p.adRequests,
-        impressions: p.impressions,
-        revenue: p.revenue,
-        cost: p.cost,
-        profit: p.profit,
-      })),
-      daily,
+      currentMonthLabel: result.displayMonthLabel,
+      dateRange: result.displayDateRange,
+      daysElapsed: result.dataDaysElapsed,
+      daysInMonth: result.daysInMonth,
+      hasCurrentMonthData: result.hasCurrentMonthData,
+      totals: result.totals,
+      publishers: result.publishers,
+      daily: result.daily,
     });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "Unknown error";
-    const status =
-      axios.isAxiosError(e) && e.response?.status ? e.response.status : 500;
+    const status = axios.isAxiosError(e) && e.response?.status ? e.response.status : 500;
     res.status(status).json({ error: msg });
   }
 });
@@ -2623,212 +2398,21 @@ router.get("/media-buyer/:prefix", async (req: Request, res: Response) => {
       res.status(400).json({ error: "Prefix is required (min 2 chars)" });
       return;
     }
-
     const client = createClient();
-    const now = getToday(today);
-    const end = addDays(now, -1);
-    const start = addDays(end, -29);
-
-    const currentDay = now.getDate();
-    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-    const hasCurrentMonthData = currentDay > 1;
-    const dim = lastDay;
-    const de = hasCurrentMonthData ? currentDay - 1 : 0;
-    
-    const monthStart = formatDate(new Date(now.getFullYear(), now.getMonth(), 1));
-    const monthEnd = formatDate(new Date(now.getFullYear(), now.getMonth(), currentDay - 1));
-    
-    const isFirstDayOfMonth = currentDay === 1;
-    const dataStart = isFirstDayOfMonth 
-      ? formatDate(new Date(now.getFullYear(), now.getMonth() - 1, 1))
-      : monthStart;
-    const dataEnd = isFirstDayOfMonth
-      ? formatDate(new Date(now.getFullYear(), now.getMonth(), 0))
-      : monthEnd;
-    
-    const dataDaysElapsed = isFirstDayOfMonth
-      ? lastDay
-      : de;
-    
-    const displayMonthLabel = isFirstDayOfMonth
-      ? monthTitleEs(dataStart)
-      : monthTitleEs(monthStart);
-    const displayDateRange = isFirstDayOfMonth
-      ? `${dataStart} al ${dataEnd}`
-      : `${monthStart} al ${monthEnd}`;
-    
-    const project = (cur: number): number => (dataDaysElapsed > 0) ? (cur / dataDaysElapsed) * dim : 0;
-
-    const discoverEnd = formatDate(end);
-    const discoverStart = formatDate(addDays(end, -364));
-    const discoverRows = await fetchMetricsGrouped(
-      client,
-      discoverStart,
-      discoverEnd,
-      ["publisher"]
-    );
-
-    const prefixNames = new Set<string>();
-    for (const row of discoverRows) {
-      const name = row.publisher_name ?? "";
-      if (name.trim().toUpperCase().startsWith(prefix)) {
-        prefixNames.add(name);
-      }
-    }
-
-    if (prefixNames.size === 0) {
-      res.json({
-        currentMonthLabel: displayMonthLabel,
-        dateRange: displayDateRange,
-        daysElapsed: dataDaysElapsed,
-        daysInMonth: dim,
-        hasCurrentMonthData,
-        totals: {
-          adRequests: 0,
-          impressions: 0,
-          revenue: 0,
-          cost: 0,
-          profit: 0,
-          projectedAdRequests: 0,
-          projectedImpressions: 0,
-          projectedRevenue: 0,
-          projectedCost: 0,
-          projectedProfit: 0,
-        },
-        publishers: [],
-        daily: [],
-      });
-      return;
-    }
-
-    const params = new URLSearchParams();
-    appendTenantParams(params);
-    params.set("groupBy", "publisher");
-    params.set("startDate", dataStart);
-    params.set("endDate", dataEnd);
-
-    const { data } = await client.get<{ data: AggregatedRow[] }>(
-      `/api/metrics/aggregated?${params.toString()}`
-    );
-
-    type PubSnap = {
-      publisher_id: number;
-      publisher_name: string;
-      adRequests: number;
-      impressions: number;
-      revenue: number;
-      cost: number;
-      profit: number;
-    };
-
-    const curById = new Map<string, PubSnap>();
-    for (const row of data.data ?? []) {
-      const name = row.publisher_name;
-      if (!name) continue;
-      if (!prefixNames.has(name)) continue;
-      
-      curById.set(name, {
-        publisher_id: 0,
-        publisher_name: name,
-        adRequests: toNum((row as any).total_ad_requests),
-        impressions: toNum((row as any).total_impressions),
-        revenue: toNum(row.total_revenue),
-        cost: toNum(row.total_cost),
-        profit: toNum(row.total_profit),
-      });
-    }
-
-    let totalAdRequests = 0;
-    let totalImpressions = 0;
-    let totalRevenue = 0;
-    let totalCost = 0;
-    let totalProfit = 0;
-
-    for (const [, c] of curById) {
-      totalAdRequests += c.adRequests;
-      totalImpressions += c.impressions;
-      totalRevenue += c.revenue;
-      totalCost += c.cost;
-      totalProfit += c.profit;
-    }
-
-    const publishers = [...curById.values()].sort((a, b) => b.revenue - a.revenue);
-
-    const dailyRows = await fetchMetricsGrouped(
-      client,
-      dataStart,
-      dataEnd,
-      ["publisher", "date"]
-    );
-
-    const dailyTotals = new Map<string, { adRequests: number; impressions: number; revenue: number; cost: number; profit: number }>();
-    
-    for (const row of dailyRows) {
-      const name = row.publisher_name;
-      if (!name) continue;
-      if (!prefixNames.has(name)) continue;
-      
-      const date = row.date;
-      if (!date) continue;
-      
-      const dateKey = date.split('T')[0];
-      
-      const existing = dailyTotals.get(dateKey) || { adRequests: 0, impressions: 0, revenue: 0, cost: 0, profit: 0 };
-      dailyTotals.set(dateKey, {
-        adRequests: existing.adRequests + toNum(row.ad_requests),
-        impressions: existing.impressions + toNum(row.impressions),
-        revenue: existing.revenue + toNum(row.revenue ?? 0),
-        cost: existing.cost + toNum(row.cost ?? 0),
-        profit: existing.profit + toNum(row.profit ?? 0),
-      });
-    }
-
-    const daily: { date: string; adRequests: number; impressions: number; revenue: number; cost: number; profit: number }[] = [];
-    let currentDate = new Date(dataStart);
-    const endDate = new Date(dataEnd);
-    while (currentDate <= endDate) {
-      const dateStr = formatDate(currentDate);
-      const dayData = dailyTotals.get(dateStr) || { adRequests: 0, impressions: 0, revenue: 0, cost: 0, profit: 0 };
-      daily.push({
-        date: dateStr,
-        ...dayData,
-      });
-      currentDate = new Date(currentDate.getTime() + 24 * 60 * 60 * 1000);
-    }
-
+    const result = await fetchPublisherData(client, today, prefix);
     res.json({
-      currentMonthLabel: displayMonthLabel,
-      dateRange: displayDateRange,
-      daysElapsed: dataDaysElapsed,
-      daysInMonth: dim,
-      hasCurrentMonthData,
-      totals: {
-        adRequests: totalAdRequests,
-        impressions: totalImpressions,
-        revenue: totalRevenue,
-        cost: totalCost,
-        profit: totalProfit,
-        projectedAdRequests: project(totalAdRequests),
-        projectedImpressions: project(totalImpressions),
-        projectedRevenue: project(totalRevenue),
-        projectedCost: project(totalCost),
-        projectedProfit: project(totalProfit),
-      },
-      publishers: publishers.map(p => ({
-        publisher_id: p.publisher_id,
-        publisher_name: p.publisher_name,
-        adRequests: p.adRequests,
-        impressions: p.impressions,
-        revenue: p.revenue,
-        cost: p.cost,
-        profit: p.profit,
-      })),
-      daily,
+      currentMonthLabel: result.displayMonthLabel,
+      dateRange: result.displayDateRange,
+      daysElapsed: result.dataDaysElapsed,
+      daysInMonth: result.daysInMonth,
+      hasCurrentMonthData: result.hasCurrentMonthData,
+      totals: result.totals,
+      publishers: result.publishers,
+      daily: result.daily,
     });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "Unknown error";
-    const status =
-      axios.isAxiosError(e) && e.response?.status ? e.response.status : 500;
+    const status = axios.isAxiosError(e) && e.response?.status ? e.response.status : 500;
     res.status(status).json({ error: msg });
   }
 });
@@ -2862,7 +2446,7 @@ router.get("/top-ten", async (req: Request, res: Response) => {
       : scopeRaw;
 
     const client = createClient();
-    const end = addDays(todayLocal(today), -1);
+    const end = addDays(getToday(today), -1);
     let start: Date;
     let periodLabel: string;
 
@@ -3011,7 +2595,7 @@ router.get("/dropped-ad-units", async (req: Request, res: Response) => {
       : scopeRaw;
 
     const client = createClient();
-    const end = addDays(todayLocal(today), -1);
+    const end = addDays(getToday(today), -1);
     const startRecent = addDays(end, -7);
     const startPast = addDays(end, -30);
 
@@ -3148,7 +2732,7 @@ router.get("/dropped-publishers", async (req: Request, res: Response) => {
       : scopeRaw;
 
     const client = createClient();
-    const end = addDays(todayLocal(today), -1);
+    const end = addDays(getToday(today), -1);
     const startRecent = addDays(end, -7);
     const startPast = addDays(end, -30);
 
@@ -3280,7 +2864,7 @@ router.get("/alerts/daily-drop", async (req: Request, res: Response) => {
       : scopeRaw === 'sasha' ? 'Sasha Balbi'
       : scopeRaw === 'embi' ? 'Embi Media'
       : scopeRaw;
-    const now = todayLocal(today);
+    const now = getToday(today);
     const end = addDays(now, -1);
     const endStr = formatDate(end);
 

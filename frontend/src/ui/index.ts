@@ -1,4 +1,5 @@
 export { ErrorBox } from './ErrorBox'
+export { ErrorBoundary } from './ErrorBoundary'
 export { Loading } from './Loading'
 export { Skeleton, SkeletonChart, SkeletonCards, SkeletonTopTen, SkeletonTable } from './Skeleton'
 export { Button } from './Button'
