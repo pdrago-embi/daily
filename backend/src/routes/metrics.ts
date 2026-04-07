@@ -3368,7 +3368,6 @@ router.get("/alerts/daily-drop", async (req: Request, res: Response) => {
     const previousAdUnits = new Map<string, { name: string; publisherName: string; totalAr: number; days: number }>();
     for (const r of filteredPreviousRows) {
       const ar = toNum(r.ad_requests);
-      if (ar < 5000) continue;
       const key = `${r.ad_unit_id}-${r.publisher_id ?? 0}`;
       const existing = previousAdUnits.get(key);
       if (!existing) {
@@ -3441,7 +3440,7 @@ router.get("/alerts/daily-drop", async (req: Request, res: Response) => {
       const prevAvg = prev.totalAr / prev.days;
       const curr = currentAdUnits.get(key);
       const currAvg = curr ? curr.totalAr / curr.days : 0;
-      if (currAvg < prevAvg * 0.05) {
+      if (currAvg < 1000 && prevAvg >= 5000) {
         const dropPct = prevAvg > 0 ? Math.round(((prevAvg - currAvg) / prevAvg) * 100) : 100;
         droppedAdUnits.push({
           name: prev.name,
@@ -3458,7 +3457,7 @@ router.get("/alerts/daily-drop", async (req: Request, res: Response) => {
       const prevAvg = prev.totalAr / prev.days;
       const curr = currentPublishers.get(key);
       const currAvg = curr ? curr.totalAr / curr.days : 0;
-      if (currAvg < prevAvg * 0.05) {
+      if (currAvg < 1000 && prevAvg >= 5000) {
         const dropPct = prevAvg > 0 ? Math.round(((prevAvg - currAvg) / prevAvg) * 100) : 100;
         droppedPublishers.push({
           name: prev.name,
@@ -3477,7 +3476,8 @@ router.get("/alerts/daily-drop", async (req: Request, res: Response) => {
       const currAvg = curr.totalAr / curr.days;
       const prev = previousAdUnits.get(key);
       const prevAvg = prev ? prev.totalAr / prev.days : 0;
-      if (prevAvg < 500 && currAvg >= 5000) {
+      const increase = currAvg - prevAvg;
+      if (prevAvg < 5000 && increase >= 5000) {
         const increasePct = prevAvg > 0 ? Math.round(((currAvg - prevAvg) / prevAvg) * 100) : 100;
         recoveredAdUnits.push({
           name: curr.name,
@@ -3494,7 +3494,8 @@ router.get("/alerts/daily-drop", async (req: Request, res: Response) => {
       const currAvg = curr.totalAr / curr.days;
       const prev = previousPublishers.get(key);
       const prevAvg = prev ? prev.totalAr / prev.days : 0;
-      if (prevAvg < 500 && currAvg >= 5000) {
+      const increase = currAvg - prevAvg;
+      if (prevAvg < 5000 && increase >= 5000) {
         const increasePct = prevAvg > 0 ? Math.round(((currAvg - prevAvg) / prevAvg) * 100) : 100;
         recoveredPublishers.push({
           name: curr.name,
