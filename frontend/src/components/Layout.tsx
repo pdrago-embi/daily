@@ -244,6 +244,54 @@ export function Layout({ children }: LayoutProps) {
                 {showNavLabels && <span>Ad Requests</span>}
               </Link>
 
+              <div className="pt-2">
+                {showNavLabels && (
+                  <span className={`px-3 text-xs font-semibold uppercase tracking-wider ${
+                    isDark ? 'text-slate-500' : 'text-slate-400'
+                  }`}>
+                    Alarma
+                  </span>
+                )}
+              </div>
+
+              <Link
+                to="/alarma"
+                title="Alarma de baja actividad"
+                className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  location.pathname === '/alarma'
+                    ? isDark 
+                      ? 'bg-violet-600/20 text-violet-300' 
+                      : 'bg-violet-100 text-violet-700'
+                    : isDark 
+                      ? 'text-slate-400 hover:bg-slate-800 hover:text-slate-200' 
+                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                }`}
+              >
+                <svg className="h-5 w-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                {showNavLabels && <span>Baja Actividad</span>}
+              </Link>
+
+              <Link
+                to="/fill-rate"
+                title="Bajo Fill Rate"
+                className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  location.pathname === '/fill-rate'
+                    ? isDark 
+                      ? 'bg-violet-600/20 text-violet-300' 
+                      : 'bg-violet-100 text-violet-700'
+                    : isDark 
+                      ? 'text-slate-400 hover:bg-slate-800 hover:text-slate-200' 
+                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                }`}
+              >
+                <svg className="h-5 w-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+                {showNavLabels && <span>Fill Rate</span>}
+              </Link>
+
               <div className="pt-4 pb-2 flex items-center justify-between">
                 {showNavLabels && (
                   <span className={`px-3 text-xs font-semibold uppercase tracking-wider ${

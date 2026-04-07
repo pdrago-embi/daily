@@ -2855,6 +2855,171 @@ router.get("/dropped-publishers", async (req: Request, res: Response) => {
   }
 });
 
+router.get("/low-fill-rate-ad-units", async (req: Request, res: Response) => {
+  try {
+    const scopeRaw = String(req.query.scope ?? 'general').toLowerCase();
+    const today = req.query.today as string | undefined;
+    const scopeLabel = scopeRaw === 'general' ? 'General' 
+      : scopeRaw === 'sasha' ? 'Sasha Balbi' 
+      : scopeRaw === 'embi' ? 'Embi Media' 
+      : scopeRaw;
+
+    const client = createClient();
+    const end = addDays(getToday(today), -1);
+    const startRecent = addDays(end, -2);
+    const endStr = formatDate(end);
+    const recentStr = formatDate(startRecent);
+
+    const recentRows = await fetchMetricsGrouped(client, recentStr, endStr, ['ad_unit', 'publisher']);
+
+    const shouldFilterPublisher = (name: string | undefined): boolean => {
+      if (scopeRaw === 'general') return false;
+      if (scopeRaw === 'sasha') return !isSashaPublisherName(name);
+      if (scopeRaw === 'embi') return !isEmbiPublisherName(name);
+      return !name?.trim().toUpperCase().startsWith(scopeRaw.toUpperCase());
+    };
+
+    interface FillRateStats {
+      adUnitName: string;
+      publisherName: string;
+      totalAr: number;
+      totalImpr: number;
+    }
+
+    const fillRates = new Map<string, FillRateStats>();
+    for (const r of recentRows) {
+      const pubName = r.publisher_name?.trim();
+      if (shouldFilterPublisher(pubName)) continue;
+      const key = `${r.ad_unit_id}-${r.publisher_id ?? 0}`;
+      const ar = toNum(r.ad_requests);
+      const impr = toNum(r.impressions);
+      const existing = fillRates.get(key);
+      if (!existing) {
+        fillRates.set(key, {
+          adUnitName: r.ad_unit_name?.trim() || `Ad unit ${r.ad_unit_id}`,
+          publisherName: pubName || `Publisher ${r.publisher_id}`,
+          totalAr: ar,
+          totalImpr: impr,
+        });
+      } else {
+        existing.totalAr += ar;
+        existing.totalImpr += impr;
+      }
+    }
+
+    const lowFillRate: { name: string; publisherName: string; avgAr: number; avgImpr: number; fillRate: number }[] = [];
+    
+    for (const [key, stats] of fillRates) {
+      const avgAr = Math.round(stats.totalAr / 3);
+      if (avgAr < 5000) continue;
+
+      const fillRate = stats.totalAr > 0 ? (stats.totalImpr / stats.totalAr) * 100 : 0;
+      if (fillRate >= 50) continue;
+
+      const avgImpr = Math.round(stats.totalImpr / 3);
+
+      lowFillRate.push({
+        name: stats.adUnitName,
+        publisherName: stats.publisherName,
+        avgAr,
+        avgImpr,
+        fillRate: Math.round(fillRate * 10) / 10,
+      });
+    }
+
+    lowFillRate.sort((a, b) => a.fillRate - b.fillRate);
+
+    res.json({
+      scope: scopeRaw,
+      scopeLabel,
+      periodLabel: `Últimos 3 días (${recentStr} → ${endStr})`,
+      items: lowFillRate.slice(0, 50),
+    });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : "Unknown error";
+    const status = axios.isAxiosError(e) && e.response?.status ? e.response.status : 500;
+    res.status(status).json({ error: msg });
+  }
+});
+
+router.get("/low-fill-rate-publishers", async (req: Request, res: Response) => {
+  try {
+    const scopeRaw = String(req.query.scope ?? 'general').toLowerCase();
+    const today = req.query.today as string | undefined;
+    const scopeLabel = scopeRaw === 'general' ? 'General' 
+      : scopeRaw === 'sasha' ? 'Sasha Balbi' 
+      : scopeRaw === 'embi' ? 'Embi Media' 
+      : scopeRaw;
+
+    const client = createClient();
+    const end = addDays(getToday(today), -1);
+    const startRecent = addDays(end, -2);
+    const endStr = formatDate(end);
+    const recentStr = formatDate(startRecent);
+
+    const recentRows = await fetchMetricsGrouped(client, recentStr, endStr, ['publisher']);
+
+    const shouldFilterPublisher = (name: string | undefined): boolean => {
+      if (scopeRaw === 'general') return false;
+      if (scopeRaw === 'sasha') return !isSashaPublisherName(name);
+      if (scopeRaw === 'embi') return !isEmbiPublisherName(name);
+      return !name?.trim().toUpperCase().startsWith(scopeRaw.toUpperCase());
+    };
+
+    const fillRates = new Map<string, { name: string; totalAr: number; totalImpr: number }>();
+    for (const r of recentRows) {
+      const pubName = r.publisher_name?.trim();
+      if (shouldFilterPublisher(pubName)) continue;
+      const ar = toNum(r.ad_requests);
+      const impr = toNum(r.impressions);
+      const key = pubName || `Publisher ${r.publisher_id}`;
+      const existing = fillRates.get(key);
+      if (!existing) {
+        fillRates.set(key, {
+          name: key,
+          totalAr: ar,
+          totalImpr: impr,
+        });
+      } else {
+        existing.totalAr += ar;
+        existing.totalImpr += impr;
+      }
+    }
+
+    const lowFillRate: { name: string; avgAr: number; avgImpr: number; fillRate: number }[] = [];
+    
+    for (const [key, stats] of fillRates) {
+      const avgAr = Math.round(stats.totalAr / 3);
+      if (avgAr < 5000) continue;
+
+      const fillRate = stats.totalAr > 0 ? (stats.totalImpr / stats.totalAr) * 100 : 0;
+      if (fillRate >= 50) continue;
+
+      const avgImpr = Math.round(stats.totalImpr / 3);
+
+      lowFillRate.push({
+        name: stats.name,
+        avgAr,
+        avgImpr,
+        fillRate: Math.round(fillRate * 10) / 10,
+      });
+    }
+
+    lowFillRate.sort((a, b) => a.fillRate - b.fillRate);
+
+    res.json({
+      scope: scopeRaw,
+      scopeLabel,
+      periodLabel: `Últimos 3 días (${recentStr} → ${endStr})`,
+      items: lowFillRate.slice(0, 50),
+    });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : "Unknown error";
+    const status = axios.isAxiosError(e) && e.response?.status ? e.response.status : 500;
+    res.status(status).json({ error: msg });
+  }
+});
+
 router.get("/alerts/daily-drop", async (req: Request, res: Response) => {
   try {
     const client = createClient();
@@ -3060,8 +3225,7 @@ router.get("/alerts/daily-drop", async (req: Request, res: Response) => {
       const currAvg = curr.totalAr / curr.days;
       const prev = previousAdUnits.get(key);
       const prevAvg = prev ? prev.totalAr / prev.days : 0;
-      const increase = currAvg - prevAvg;
-      if (prevAvg < 5000 && increase >= 5000) {
+      if (currAvg >= 1000 && prevAvg < 1000) {
         const increasePct = prevAvg > 0 ? Math.round(((currAvg - prevAvg) / prevAvg) * 100) : 100;
         recoveredAdUnits.push({
           name: curr.name,
@@ -3078,8 +3242,7 @@ router.get("/alerts/daily-drop", async (req: Request, res: Response) => {
       const currAvg = curr.totalAr / curr.days;
       const prev = previousPublishers.get(key);
       const prevAvg = prev ? prev.totalAr / prev.days : 0;
-      const increase = currAvg - prevAvg;
-      if (prevAvg < 5000 && increase >= 5000) {
+      if (currAvg >= 1000 && prevAvg < 1000) {
         const increasePct = prevAvg > 0 ? Math.round(((currAvg - prevAvg) / prevAvg) * 100) : 100;
         recoveredPublishers.push({
           name: curr.name,

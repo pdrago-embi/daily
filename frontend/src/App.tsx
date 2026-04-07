@@ -3,7 +3,6 @@ import { useDashboardData, useMediaBuyers } from './hooks'
 import { TrendChart } from './components/TrendChart'
 import { KpiSummaryCards } from './components/KpiSummaryCards'
 import { TopTenByRevenue } from './components/TopTenByRevenue'
-import { DroppedAdUnits } from './components/DroppedAdUnits'
 import { ErrorBox, SkeletonChart, SkeletonCards, ToggleGroup } from './ui'
 import type { SummaryScope } from './types'
 import { getDefaultMediaBuyer } from './utils/mediaBuyerCookie'
@@ -95,7 +94,6 @@ export default function App() {
       </section>
 
       <TopTenByRevenue scope={chartTab} />
-      <DroppedAdUnits scope={chartTab} />
     </div>
   )
 }

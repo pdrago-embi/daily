@@ -324,6 +324,63 @@ export async function fetchDroppedPublishers(scope?: string): Promise<DroppedPub
   return res.json() as Promise<DroppedPublishersResponse>
 }
 
+export interface LowFillRateAdUnit {
+  name: string
+  publisherName: string
+  avgAr: number
+  avgImpr: number
+  fillRate: number
+}
+
+export interface LowFillRateAdUnitsResponse {
+  scope: string
+  scopeLabel: string
+  periodLabel: string
+  items: LowFillRateAdUnit[]
+}
+
+export interface LowFillRatePublisher {
+  name: string
+  avgAr: number
+  avgImpr: number
+  fillRate: number
+}
+
+export interface LowFillRatePublishersResponse {
+  scope: string
+  scopeLabel: string
+  periodLabel: string
+  items: LowFillRatePublisher[]
+}
+
+export async function fetchLowFillRateAdUnits(scope?: string): Promise<LowFillRateAdUnitsResponse> {
+  const today = getTodayDate()
+  const params = new URLSearchParams()
+  params.set('today', today)
+  if (scope) params.set('scope', scope)
+  const q = params.toString()
+  const res = await fetch(`/api/low-fill-rate-ad-units?${q}`)
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error((body as { error?: string }).error ?? res.statusText)
+  }
+  return res.json() as Promise<LowFillRateAdUnitsResponse>
+}
+
+export async function fetchLowFillRatePublishers(scope?: string): Promise<LowFillRatePublishersResponse> {
+  const today = getTodayDate()
+  const params = new URLSearchParams()
+  params.set('today', today)
+  if (scope) params.set('scope', scope)
+  const q = params.toString()
+  const res = await fetch(`/api/low-fill-rate-publishers?${q}`)
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error((body as { error?: string }).error ?? res.statusText)
+  }
+  return res.json() as Promise<LowFillRatePublishersResponse>
+}
+
 export interface DailyDropAdUnit {
   name: string
   publisherName: string

@@ -15,6 +15,8 @@ const PublishersPage = lazy(() => import('./components/PublishersPage').then(m =
 const RevenueVariationsPage = lazy(() => import('./components/VariationsPages').then(m => ({ default: m.RevenueVariationsPage })))
 const ImpressionsVariationsPage = lazy(() => import('./components/VariationsPages').then(m => ({ default: m.ImpressionsVariationsPage })))
 const AdRequestsVariationsPage = lazy(() => import('./components/VariationsPages').then(m => ({ default: m.AdRequestsVariationsPage })))
+const AlarmaPage = lazy(() => import('./components/AlarmaPage').then(m => ({ default: m.AlarmaPage })))
+const FillRatePage = lazy(() => import('./components/FillRatePage').then(m => ({ default: m.FillRatePage })))
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -123,6 +125,8 @@ function DashboardRoutes() {
           <Route path="/variaciones/revenue" element={<RevenueVariationsPage />} />
           <Route path="/variaciones/impressions" element={<ImpressionsVariationsPage />} />
           <Route path="/variaciones/ad-requests" element={<AdRequestsVariationsPage />} />
+          <Route path="/alarma" element={<AlarmaPage />} />
+          <Route path="/fill-rate" element={<FillRatePage />} />
           <Route path="/media-buyers/:buyerId" element={<MediaBuyerRoute />} />
         </Routes>
       </Suspense>
